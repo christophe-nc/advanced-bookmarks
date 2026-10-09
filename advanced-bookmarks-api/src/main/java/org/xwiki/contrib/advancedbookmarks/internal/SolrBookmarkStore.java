@@ -327,10 +327,19 @@ public class SolrBookmarkStore implements BookmarkStore
         return client.query(query).getResults();
     }
 
-    private SolrClient getSolrClient() throws SolrException
+    /**
+     * XWiki returns a core without client, rather than failing, when it cannot create the core: for instance when
+     * the core initializer is not visible from the root component manager, or when a remote Solr server lacks the
+     * core. This must be reported as a storage failure instead of breaking the caller.
+     */
+    private SolrClient getSolrClient() throws SolrException, BookmarkStoreException
     {
         XWikiSolrCore core = this.solr.getCore(CORE_NAME);
-        return core.getClient();
+        SolrClient client = core != null ? core.getClient() : null;
+        if (client == null) {
+            throw new BookmarkStoreException("The Solr core [" + CORE_NAME + "] is not available.", null);
+        }
+        return client;
     }
 
     /**

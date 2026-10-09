@@ -2,6 +2,26 @@
 
 Advanced Bookmarks is an XWiki extension for managing personal bookmarks in folders, with a page star and a quick-access panel.
 
+## Installation
+
+Install the **Advanced Bookmarks** extension (`org.xwiki.contrib.advancedbookmarks:advanced-bookmarks-ui`) with the Extension Manager, as a wiki administrator. Its Java part, `advanced-bookmarks-api`, is installed automatically.
+
+The Java part can only be installed at farm level: the Solr core it creates is shared by all the wikis of the farm, and XWiki creates Solr cores from the farm-level components. Installing the extension on the whole farm requires programming rights.
+
+The installing user must be an administrator of the wiki: the star is only displayed when the author of its UI extension has the administration right.
+
+## Usage
+
+- **Star**: a star button is added to the action bar of every page (next to *Edit* and *Create*), for logged-in users. It adds the page to the uncategorized bookmarks, or removes it. It is not displayed on the pages of the extension itself.
+- **Panel**: the *Bookmarks* panel (`Panels.MyBookmarks`) lists the bookmarks selected for the panel, or the first ten, with a link to the management page. It is not added to the page layout automatically: add it in *Administration > Look & Feel > Panels*. Deleted pages are struck through; pages the user cannot view are shown without link.
+
+## Modules
+
+| Module | Packaging | Content |
+| --- | --- | --- |
+| `advanced-bookmarks-api` | JAR | Storage, business logic, rights, script service and translations. |
+| `advanced-bookmarks-ui` | XAR | Wiki pages: JSON service, star and panel. |
+
 ## Access rules
 
 Bookmarks are private and kept separately for each wiki of a farm. All the checks are made on the server:
@@ -25,6 +45,8 @@ The extension does not require programming rights.
 | `isBookmarked(page)` | Whether the current user bookmarked a page. |
 | `toggle(page)` | Add the page to the uncategorized bookmarks of the current user, or remove it. Write operation. |
 | `save(user, json, version)` | Replace all the bookmarks of a user, provided they were not modified since `version` was read; `conflict` otherwise. Write operation. |
+
+The page `AdvancedBookmarks.Code.Service` exposes the same operations over HTTP, with the `get` action and an `operation` parameter (`isBookmarked`, `toggle`, `getBookmarks`, `save`); it returns the result as JSON with the matching HTTP status.
 
 ## Data lifecycle
 

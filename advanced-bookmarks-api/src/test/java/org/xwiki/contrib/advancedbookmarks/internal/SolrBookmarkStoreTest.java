@@ -193,6 +193,16 @@ class SolrBookmarkStoreTest
     }
 
     @Test
+    void reportsACoreThatXWikiCouldNotCreateAsAStorageFailure() throws Exception
+    {
+        XWikiSolrCore coreWithoutClient = mock(XWikiSolrCore.class);
+        when(this.solr.getCore(SolrBookmarkStore.CORE_NAME)).thenReturn(coreWithoutClient, (XWikiSolrCore) null);
+
+        assertThrows(BookmarkStoreException.class, () -> this.store.get(WIKI, USER));
+        assertThrows(BookmarkStoreException.class, () -> this.store.save(WIKI, USER, BOOKMARK_JSON, 0L));
+    }
+
+    @Test
     void rejectsInvalidIdentities()
     {
         assertThrows(BookmarkStoreException.class, () -> this.store.get(" ", USER));
