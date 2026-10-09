@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xwikidoc>
+  <web>AdvancedBookmarks</web>
+  <name>WebHome</name>
+  <language/>
+  <defaultLanguage/>
+  <translation>0</translation>
+  <creator>XWiki.Admin</creator>
+  <creationDate>2026-10-09T00:00:00Z</creationDate>
+  <author>XWiki.Admin</author>
+  <date>2026-10-09T00:00:00Z</date>
+  <contentAuthor>XWiki.Admin</contentAuthor>
+  <version>1.1</version>
+  <title>Advanced Bookmarks</title>
+  <comment>Default home page for the bookmark macro.</comment>
+  <minorEdit>false</minorEdit>
+  <syntaxId>xwiki/2.1</syntaxId>
+  <hidden>false</hidden>
+  <content>{{bookmarks /}}
+</content>
+</xwikidoc>
