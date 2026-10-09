@@ -1,36 +1,93 @@
+/*
+ * See the NOTICE file distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2.1 of
+ * the License, or (at your option) any later version.
+ *
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this software; if not, write to the Free
+ * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
+ */
 package org.xwiki.contrib.advancedbookmarks;
 
+/**
+ * Minimal renderer for the bookmarks macro bootstrap.
+ *
+ * @since 1.0
+ */
 public class BookmarksMacro {
+    /** Default home page for bookmark management. */
     public static final String DEFAULT_HOME_PAGE = "AdvancedBookmarks.WebHome";
+    /** Default macro title. */
     public static final String DEFAULT_TITLE = "Advanced Bookmarks";
+    /** Default label for the link to the full bookmark list. */
     public static final String DEFAULT_VIEW_ALL_LABEL = "View all my bookmarks";
 
     private final BookmarkManager bookmarkManager;
 
+    /**
+     * Create a macro using a default bookmark manager.
+     */
     public BookmarksMacro() {
         this(new BookmarkManager());
     }
 
+    /**
+     * Create a macro with the specified bookmark manager.
+     *
+     * @param bookmarkManager the manager used for panel configuration
+     */
     public BookmarksMacro(BookmarkManager bookmarkManager) {
         this.bookmarkManager = bookmarkManager;
     }
 
+    /**
+     * @return the default panel size
+     */
     public int getDefaultPanelSize() {
         return bookmarkManager.normalizePanelSize(null);
     }
 
+    /**
+     * @return the default management page reference
+     */
     public String getDefaultHomePage() {
         return DEFAULT_HOME_PAGE;
     }
 
+    /**
+     * @return the macro name
+     */
     public String getMacroName() {
         return "bookmarks";
     }
 
+    /**
+     * Render the default macro configuration.
+     *
+     * @return rendered HTML
+     */
     public String render() {
         return render(getDefaultPanelSize(), false, false);
     }
 
+    /**
+     * Render the macro with the requested panel configuration.
+     *
+     * @param panelSize the requested panel size
+     * @param readOnly whether bookmark changes are disabled
+     * @param compact whether compact layout is requested
+     * @return rendered HTML
+     */
     public String render(int panelSize, boolean readOnly, boolean compact) {
         int effectivePanelSize = bookmarkManager.normalizePanelSize(panelSize);
 
