@@ -93,4 +93,15 @@ class BookmarkManagerTest {
         BookmarkEntry removed = manager.removeDeletedEntry(entry);
         assertTrue(removed.isDeleted());
     }
+
+    @Test
+    void publicationMetadataUsesEnglishIdentifiersAndLicense() {
+        ExtensionMetadata metadata = new ExtensionMetadata();
+
+        assertEquals("org.xwiki.contrib", metadata.getGroupId());
+        assertEquals("advanced-bookmarks", metadata.getArtifactId());
+        assertEquals("Advanced Bookmarks", metadata.getName());
+        assertEquals("LGPL 2.1", metadata.getLicense());
+        assertEquals("org.xwiki.contrib:advanced-bookmarks", metadata.getCoordinates());
+    }
 }
