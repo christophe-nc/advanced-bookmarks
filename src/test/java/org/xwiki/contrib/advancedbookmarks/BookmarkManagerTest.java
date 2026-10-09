@@ -29,6 +29,17 @@ class BookmarkManagerTest {
     }
 
     @Test
+    void bookmarksMacroSupportsPanelConfiguration() {
+        BookmarksMacro macro = new BookmarksMacro();
+
+        String rendered = macro.render(8, true, true);
+
+        assertTrue(rendered.contains("data-panel-size=\"8\""));
+        assertTrue(rendered.contains("data-read-only=\"true\""));
+        assertTrue(rendered.contains("data-compact=\"true\""));
+    }
+
+    @Test
     void foldersAreSortedWithUncategorizedFirstAndByOrder() {
         BookmarkManager manager = new BookmarkManager();
         BookmarkFolder uncategorized = new BookmarkFolder("uncategorized", "Non classés", null, 0, true);

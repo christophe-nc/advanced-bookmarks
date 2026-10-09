@@ -28,8 +28,18 @@ public class BookmarksMacro {
     }
 
     public String render() {
+        return render(getDefaultPanelSize(), false, false);
+    }
+
+    public String render(int panelSize, boolean readOnly, boolean compact) {
+        int effectivePanelSize = bookmarkManager.normalizePanelSize(panelSize);
+
         StringBuilder html = new StringBuilder();
-        html.append("<section class=\"advanced-bookmarks\" aria-label=\"Advanced Bookmarks\">\n");
+        html.append("<section class=\"advanced-bookmarks\" aria-label=\"Advanced Bookmarks\"")
+            .append(" data-panel-size=\"").append(effectivePanelSize).append("\"")
+            .append(" data-read-only=\"").append(readOnly).append("\"")
+            .append(" data-compact=\"").append(compact).append("\">")
+            .append("\n");
         html.append("  <h2>").append(DEFAULT_TITLE).append("</h2>\n");
         html.append("  <p><a href=\"/xwiki/bin/view/").append(DEFAULT_HOME_PAGE).append("\">")
             .append(DEFAULT_VIEW_ALL_LABEL)
