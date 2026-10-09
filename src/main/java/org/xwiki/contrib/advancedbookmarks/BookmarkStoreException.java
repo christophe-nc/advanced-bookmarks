@@ -22,9 +22,10 @@ package org.xwiki.contrib.advancedbookmarks;
 /**
  * Indicates that a bookmark storage operation could not be completed.
  *
+ * @version $Id$
  * @since 1.0
  */
-public class BookmarkStoreException extends Exception
+public class BookmarkStoreException extends BookmarkException
 {
     private static final long serialVersionUID = 1L;
 

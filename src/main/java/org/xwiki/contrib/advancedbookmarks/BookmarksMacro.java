@@ -20,54 +20,47 @@
 package org.xwiki.contrib.advancedbookmarks;
 
 /**
- * Minimal renderer for the bookmarks macro bootstrap.
+ * Renders the placeholder markup of the bookmarks macro.
  *
+ * @version $Id$
  * @since 1.0
  */
-public class BookmarksMacro {
+public class BookmarksMacro
+{
     /** Default home page for bookmark management. */
     public static final String DEFAULT_HOME_PAGE = "AdvancedBookmarks.WebHome";
+
     /** Default macro title. */
     public static final String DEFAULT_TITLE = "Advanced Bookmarks";
+
     /** Default label for the link to the full bookmark list. */
     public static final String DEFAULT_VIEW_ALL_LABEL = "View all my bookmarks";
 
-    private final BookmarkManager bookmarkManager;
+    private static final String ATTRIBUTE_END = "\"";
 
-    /**
-     * Create a macro using a default bookmark manager.
-     */
-    public BookmarksMacro() {
-        this(new BookmarkManager());
-    }
-
-    /**
-     * Create a macro with the specified bookmark manager.
-     *
-     * @param bookmarkManager the manager used for panel configuration
-     */
-    public BookmarksMacro(BookmarkManager bookmarkManager) {
-        this.bookmarkManager = bookmarkManager;
-    }
+    private static final String TAG_END = "\">";
 
     /**
      * @return the default panel size
      */
-    public int getDefaultPanelSize() {
-        return bookmarkManager.normalizePanelSize(null);
+    public int getDefaultPanelSize()
+    {
+        return BookmarkManager.MAX_PANEL_SIZE;
     }
 
     /**
      * @return the default management page reference
      */
-    public String getDefaultHomePage() {
+    public String getDefaultHomePage()
+    {
         return DEFAULT_HOME_PAGE;
     }
 
     /**
      * @return the macro name
      */
-    public String getMacroName() {
+    public String getMacroName()
+    {
         return "bookmarks";
     }
 
@@ -76,29 +69,32 @@ public class BookmarksMacro {
      *
      * @return rendered HTML
      */
-    public String render() {
+    public String render()
+    {
         return render(getDefaultPanelSize(), false, false);
     }
 
     /**
      * Render the macro with the requested panel configuration.
      *
-     * @param panelSize the requested panel size
+     * @param panelSize the requested panel size, bounded to {@link BookmarkManager#MAX_PANEL_SIZE}
      * @param readOnly whether bookmark changes are disabled
      * @param compact whether compact layout is requested
      * @return rendered HTML
      */
-    public String render(int panelSize, boolean readOnly, boolean compact) {
-        int effectivePanelSize = bookmarkManager.normalizePanelSize(panelSize);
+    public String render(int panelSize, boolean readOnly, boolean compact)
+    {
+        int effectivePanelSize = panelSize <= 0 ? BookmarkManager.MAX_PANEL_SIZE
+            : Math.min(panelSize, BookmarkManager.MAX_PANEL_SIZE);
 
         StringBuilder html = new StringBuilder();
         html.append("<section class=\"advanced-bookmarks\" aria-label=\"Advanced Bookmarks\"")
-            .append(" data-panel-size=\"").append(effectivePanelSize).append("\"")
-            .append(" data-read-only=\"").append(readOnly).append("\"")
-            .append(" data-compact=\"").append(compact).append("\">")
+            .append(" data-panel-size=\"").append(effectivePanelSize).append(ATTRIBUTE_END)
+            .append(" data-read-only=\"").append(readOnly).append(ATTRIBUTE_END)
+            .append(" data-compact=\"").append(compact).append(TAG_END)
             .append("\n");
         html.append("  <h2>").append(DEFAULT_TITLE).append("</h2>\n");
-        html.append("  <p><a href=\"/xwiki/bin/view/").append(DEFAULT_HOME_PAGE).append("\">")
+        html.append("  <p><a href=\"/xwiki/bin/view/").append(DEFAULT_HOME_PAGE).append(TAG_END)
             .append(DEFAULT_VIEW_ALL_LABEL)
             .append("</a></p>\n");
         html.append("  <ul>\n");

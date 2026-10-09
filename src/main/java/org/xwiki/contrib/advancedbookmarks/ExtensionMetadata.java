@@ -22,9 +22,11 @@ package org.xwiki.contrib.advancedbookmarks;
 /**
  * Exposes the public extension coordinates.
  *
+ * @version $Id$
  * @since 1.0
  */
-public class ExtensionMetadata {
+public class ExtensionMetadata
+{
     /** Maven group identifier. */
     public static final String GROUP_ID = "org.xwiki.contrib";
     /** Maven artifact identifier. */
@@ -37,35 +39,40 @@ public class ExtensionMetadata {
     /**
      * @return the Maven group identifier
      */
-    public String getGroupId() {
+    public String getGroupId()
+    {
         return GROUP_ID;
     }
 
     /**
      * @return the Maven artifact identifier
      */
-    public String getArtifactId() {
+    public String getArtifactId()
+    {
         return ARTIFACT_ID;
     }
 
     /**
      * @return the extension display name
      */
-    public String getName() {
+    public String getName()
+    {
         return NAME;
     }
 
     /**
      * @return the extension license
      */
-    public String getLicense() {
+    public String getLicense()
+    {
         return LICENSE;
     }
 
     /**
      * @return the Maven coordinates
      */
-    public String getCoordinates() {
+    public String getCoordinates()
+    {
         return GROUP_ID + ":" + ARTIFACT_ID;
     }
 }

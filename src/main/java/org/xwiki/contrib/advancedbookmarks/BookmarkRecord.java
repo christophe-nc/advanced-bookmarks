@@ -24,6 +24,7 @@ package org.xwiki.contrib.advancedbookmarks;
  *
  * @param json the serialized bookmark folders and entries
  * @param version the Solr document version, or {@code 0} when it has not been stored yet
+ * @version $Id$
  * @since 1.0
  */
 public record BookmarkRecord(String json, long version)

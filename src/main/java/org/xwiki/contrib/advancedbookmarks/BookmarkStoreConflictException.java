@@ -22,6 +22,7 @@ package org.xwiki.contrib.advancedbookmarks;
 /**
  * Indicates that an optimistic bookmark update did not match the current Solr version.
  *
+ * @version $Id$
  * @since 1.0
  */
 public class BookmarkStoreConflictException extends BookmarkStoreException

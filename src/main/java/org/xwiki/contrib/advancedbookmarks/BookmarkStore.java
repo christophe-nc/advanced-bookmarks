@@ -27,6 +27,7 @@ import org.xwiki.component.annotation.Role;
 /**
  * Provides persistence operations for one user's bookmarks in one wiki.
  *
+ * @version $Id$
  * @since 1.0
  */
 @Role
@@ -99,4 +100,20 @@ public interface BookmarkStore
      * @throws BookmarkStoreException if the storage cannot be queried
      */
     List<String> listUsers(String wiki) throws BookmarkStoreException;
+
+    /**
+     * Delete the bookmarks of a user in every wiki of the farm, typically after the user has been deleted.
+     *
+     * @param user the serialized user reference, including its wiki
+     * @throws BookmarkStoreException if the storage cannot be updated
+     */
+    void deleteUser(String user) throws BookmarkStoreException;
+
+    /**
+     * Delete all the bookmarks stored for a wiki, typically after the wiki has been deleted.
+     *
+     * @param wiki the wiki identifier
+     * @throws BookmarkStoreException if the storage cannot be updated
+     */
+    void deleteWiki(String wiki) throws BookmarkStoreException;
 }

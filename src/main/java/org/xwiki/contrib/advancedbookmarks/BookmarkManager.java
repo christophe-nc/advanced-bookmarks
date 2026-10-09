@@ -19,125 +19,85 @@
  */
 package org.xwiki.contrib.advancedbookmarks;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
+import org.xwiki.component.annotation.Role;
+import org.xwiki.model.reference.DocumentReference;
+
 /**
- * Provides bookmark ordering and panel-size normalization.
+ * Business logic of bookmarks, in the current wiki. Every operation on the bookmarks of a user checks that the
+ * current user is allowed to manage them: users manage their own bookmarks, wiki administrators those of anyone.
  *
+ * @version $Id$
  * @since 1.0
  */
-public class BookmarkManager {
+@Role
+public interface BookmarkManager
+{
     /** Maximum number of bookmarks displayed in the panel. */
-    public static final int DEFAULT_PANEL_SIZE = 10;
+    int MAX_PANEL_SIZE = 10;
 
     /**
-     * Normalize a configured panel size to the supported range.
-     *
-     * @param requestedPanelSize the requested panel size
-     * @return the effective panel size
+     * @param user the owner of the bookmarks
+     * @return {@code true} if the current user may read and modify the bookmarks of {@code user}
      */
-    public int normalizePanelSize(Integer requestedPanelSize) {
-        if (requestedPanelSize == null || requestedPanelSize <= 0) {
-            return DEFAULT_PANEL_SIZE;
-        }
-        return Math.min(requestedPanelSize, DEFAULT_PANEL_SIZE);
-    }
+    boolean canManage(DocumentReference user);
 
     /**
-     * Check whether a panel size is supported.
-     *
-     * @param panelSize the requested panel size
-     * @return {@code true} if the size is between one and the default maximum
+     * @param user the owner of the bookmarks
+     * @return the normalized bookmarks of the user, empty with version {@code 0} if none are stored
+     * @throws BookmarkAccessDeniedException if the current user may not manage these bookmarks
+     * @throws BookmarkStoreException if the bookmarks cannot be read
      */
-    public boolean isPanelAllowed(int panelSize) {
-        return panelSize > 0 && panelSize <= DEFAULT_PANEL_SIZE;
-    }
+    BookmarkData getBookmarks(DocumentReference user) throws BookmarkException;
 
     /**
-     * Sort folders with uncategorized first, then by explicit order and name.
-     *
-     * @param folders folders to sort
-     * @return a sorted copy, or an empty list
+     * @param user the owner of the bookmarks
+     * @param page a page
+     * @return {@code true} if the page is among the bookmarks of the user
+     * @throws BookmarkAccessDeniedException if the current user may not manage these bookmarks
+     * @throws BookmarkStoreException if the bookmarks cannot be read
      */
-    public List<BookmarkFolder> sortFolders(List<BookmarkFolder> folders) {
-        if (folders == null || folders.isEmpty()) {
-            return List.of();
-        }
-
-        List<BookmarkFolder> sorted = new ArrayList<>(folders);
-        sorted.sort(Comparator
-            .comparingInt((BookmarkFolder folder) -> folder.isUncategorized() ? 0 : 1)
-            .thenComparingInt(BookmarkFolder::getOrder)
-            .thenComparing(BookmarkFolder::getName, String.CASE_INSENSITIVE_ORDER));
-        return sorted;
-    }
+    boolean isBookmarked(DocumentReference user, DocumentReference page) throws BookmarkException;
 
     /**
-     * Sort a folder hierarchy recursively.
+     * Add the page to the uncategorized bookmarks of the user, or remove it if it is already bookmarked. Concurrent
+     * modifications are retried a few times, since this operation does not depend on what the user saw.
      *
-     * @param folder the root folder to sort
+     * @param user the owner of the bookmarks
+     * @param page a page
+     * @return {@code true} if the page is bookmarked after the operation
+     * @throws BookmarkAccessDeniedException if the current user may not manage these bookmarks
+     * @throws BookmarkStoreConflictException if the bookmarks keep being modified concurrently
+     * @throws BookmarkStoreException if the bookmarks cannot be read or written
      */
-    public void sortHierarchy(BookmarkFolder folder) {
-        if (folder == null) {
-            return;
-        }
-
-        folder.getChildren().sort(Comparator
-            .comparingInt((BookmarkFolder child) -> child.isUncategorized() ? 0 : 1)
-            .thenComparingInt(BookmarkFolder::getOrder)
-            .thenComparing(BookmarkFolder::getName, String.CASE_INSENSITIVE_ORDER));
-
-        for (BookmarkFolder child : folder.getChildren()) {
-            sortHierarchy(child);
-        }
-    }
+    boolean toggle(DocumentReference user, DocumentReference page) throws BookmarkException;
 
     /**
-     * Sort bookmarks with uncategorized entries first, then by explicit order and label.
+     * Normalize, then replace all the bookmarks of the user, provided they have not been modified since they were
+     * read at {@link BookmarkData#getVersion()}.
      *
-     * @param bookmarks bookmarks to sort
-     * @return a sorted copy, or an empty list
+     * @param user the owner of the bookmarks
+     * @param data the new folders and bookmarks, with the version they were read at
+     * @return the new version
+     * @throws BookmarkAccessDeniedException if the current user may not manage these bookmarks
+     * @throws BookmarkInvalidDataException if the data exceeds the supported limits
+     * @throws BookmarkStoreConflictException if the bookmarks were modified since they were read
+     * @throws BookmarkStoreException if the bookmarks cannot be written
      */
-    public List<BookmarkEntry> sortBookmarks(List<BookmarkEntry> bookmarks) {
-        if (bookmarks == null || bookmarks.isEmpty()) {
-            return List.of();
-        }
-
-        List<BookmarkEntry> sorted = new ArrayList<>(bookmarks);
-        sorted.sort(Comparator
-            .comparingInt((BookmarkEntry bookmark) -> bookmark.isUncategorized() ? 0 : 1)
-            .thenComparingInt(BookmarkEntry::getOrder)
-            .thenComparing(BookmarkEntry::getLabel, String.CASE_INSENSITIVE_ORDER));
-        return sorted;
-    }
+    long save(DocumentReference user, BookmarkData data) throws BookmarkException;
 
     /**
-     * Return a bookmark with a new label.
-     *
-     * @param bookmark the bookmark to update
-     * @param newLabel its new label
-     * @return the updated bookmark, or {@code null} if the input is {@code null}
+     * @param data normalized bookmarks
+     * @return the bookmarks in the order of the management page: uncategorized ones first, then each folder in
+     *         depth-first order, a folder's subfolders coming before its own bookmarks
      */
-    public BookmarkEntry renameBookmark(BookmarkEntry bookmark, String newLabel) {
-        if (bookmark == null) {
-            return null;
-        }
-        return new BookmarkEntry(bookmark.getPage(), newLabel, bookmark.getFolderId(), bookmark.getOrder(),
-            bookmark.isUncategorized());
-    }
+    List<BookmarkEntry> getDisplayOrder(BookmarkData data);
 
     /**
-     * Mark a bookmark as pointing to a deleted page.
-     *
-     * @param bookmark the bookmark to update
-     * @return the updated bookmark, or {@code null} if the input is {@code null}
+     * @param data normalized bookmarks
+     * @return the bookmarks selected for the panel in display order or, if none is selected, the first
+     *         {@value #MAX_PANEL_SIZE} bookmarks in display order
      */
-    public BookmarkEntry removeDeletedEntry(BookmarkEntry bookmark) {
-        if (bookmark == null) {
-            return null;
-        }
-        return bookmark.withDeletedState(true);
-    }
+    List<BookmarkEntry> getPanel(BookmarkData data);
 }

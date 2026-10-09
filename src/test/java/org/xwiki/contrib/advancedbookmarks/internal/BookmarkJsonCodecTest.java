@@ -22,9 +22,14 @@ package org.xwiki.contrib.advancedbookmarks.internal;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
+import org.xwiki.contrib.advancedbookmarks.BookmarkData;
+import org.xwiki.contrib.advancedbookmarks.BookmarkEntry;
+import org.xwiki.contrib.advancedbookmarks.BookmarkFolder;
+import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -77,5 +82,60 @@ class BookmarkJsonCodecTest
         String json = " ".repeat(BookmarkJsonCodec.MAX_JSON_BYTES + 1);
 
         assertThrows(BookmarkStoreException.class, () -> codec.getPageReferences(json));
+    }
+
+    @Test
+    void readsTypedDataAndIgnoresUnknownProperties() throws BookmarkStoreException
+    {
+        BookmarkData data = codec.read("""
+            {"folders":[{"id":"f1","name":"Work","parent":"","order":2,"color":"red"}],
+             "bookmarks":[{"page":"wiki:Space.Page","label":"Page","folder":"f1","order":1,"panel":true}],
+             "future":true}
+            """);
+
+        assertEquals(0L, data.getVersion());
+        BookmarkFolder folder = data.getFolders().get(0);
+        assertEquals("f1", folder.getId());
+        assertEquals("Work", folder.getName());
+        assertEquals(2, folder.getOrder());
+        BookmarkEntry bookmark = data.getBookmarks().get(0);
+        assertEquals("wiki:Space.Page", bookmark.getPage());
+        assertEquals("f1", bookmark.getFolder());
+        assertTrue(bookmark.isPanel());
+    }
+
+    @Test
+    void writesOnlyFoldersAndBookmarks() throws BookmarkStoreException
+    {
+        BookmarkEntry bookmark = new BookmarkEntry();
+        bookmark.setPage("wiki:Space.Page");
+        bookmark.setLabel("Page");
+        BookmarkData data = new BookmarkData();
+        data.setBookmarks(java.util.List.of(bookmark));
+        data.setVersion(42L);
+
+        String json = codec.write(data);
+
+        assertEquals("{\"folders\":[],\"bookmarks\":[{\"page\":\"wiki:Space.Page\",\"label\":\"Page\","
+            + "\"folder\":\"\",\"order\":0,\"panel\":false}]}", json);
+        assertEquals("wiki:Space.Page", codec.read(json).getBookmarks().get(0).getPage());
+    }
+
+    @Test
+    void rejectsDataOfTheWrongType()
+    {
+        assertThrows(BookmarkInvalidDataException.class,
+            () -> codec.read("{\"folders\":[],\"bookmarks\":[{\"order\":\"first\"}]}"));
+        assertThrows(BookmarkInvalidDataException.class, () -> codec.read("[]"));
+        assertThrows(BookmarkInvalidDataException.class,
+            () -> codec.getPageReferences("{\"folders\":[],\"bookmarks\":[\"wiki:Space.Page\"]}"));
+    }
+
+    @Test
+    void rejectsTooManyItems()
+    {
+        String json = "{\"folders\":[],\"bookmarks\":[" + "{},".repeat(BookmarkJsonCodec.MAX_ITEMS) + "{}]}";
+
+        assertThrows(BookmarkInvalidDataException.class, () -> codec.read(json));
     }
 }

@@ -19,88 +19,103 @@
  */
 package org.xwiki.contrib.advancedbookmarks;
 
-import java.util.Objects;
-
 /**
- * A bookmark that references a page in the wiki.
+ * A bookmark pointing to a wiki page.
+ * <p>
+ * This is a mutable bean so that it can be (de)serialized as JSON.
  *
+ * @version $Id$
  * @since 1.0
  */
-public class BookmarkEntry {
-    private final String page;
-    private final String label;
-    private final String folderId;
-    private final int order;
-    private final boolean uncategorized;
-    private boolean deleted;
+public class BookmarkEntry
+{
+    private String page;
+
+    private String label;
+
+    private String folder = BookmarkFolder.ROOT;
+
+    private int order;
+
+    private boolean panel;
 
     /**
-     * Create a bookmark entry.
-     *
-     * @param page the serialized page reference
-     * @param label the optional display label
-     * @param folderId the containing folder identifier
-     * @param order the position within the folder
-     * @param uncategorized whether the entry is in the default folder
+     * @return the serialized reference of the bookmarked page, including its wiki
      */
-    public BookmarkEntry(String page, String label, String folderId, int order, boolean uncategorized) {
-        this.page = Objects.requireNonNull(page, "page must not be null");
-        this.label = Objects.requireNonNull(label, "label must not be null");
-        this.folderId = folderId;
-        this.order = order;
-        this.uncategorized = uncategorized;
+    public String getPage()
+    {
+        return this.page;
     }
 
     /**
-     * @return the serialized page reference
+     * @param page the serialized reference of the bookmarked page
      */
-    public String getPage() {
-        return page;
+    public void setPage(String page)
+    {
+        this.page = page;
     }
 
     /**
-     * @return the optional display label
+     * @return the label chosen by the user, possibly empty
      */
-    public String getLabel() {
-        return label;
+    public String getLabel()
+    {
+        return this.label;
     }
 
     /**
-     * @return the containing folder identifier
+     * @param label the label chosen by the user
      */
-    public String getFolderId() {
-        return folderId;
+    public void setLabel(String label)
+    {
+        this.label = label;
+    }
+
+    /**
+     * @return the containing folder identifier, {@link BookmarkFolder#ROOT} when uncategorized
+     */
+    public String getFolder()
+    {
+        return this.folder;
+    }
+
+    /**
+     * @param folder the containing folder identifier, {@link BookmarkFolder#ROOT} when uncategorized
+     */
+    public void setFolder(String folder)
+    {
+        this.folder = folder;
     }
 
     /**
      * @return the position within the folder
      */
-    public int getOrder() {
-        return order;
+    public int getOrder()
+    {
+        return this.order;
     }
 
     /**
-     * @return whether the entry is in the default folder
+     * @param order the position within the folder
      */
-    public boolean isUncategorized() {
-        return uncategorized;
+    public void setOrder(int order)
+    {
+        this.order = order;
     }
 
     /**
-     * @return whether the bookmarked page has been deleted
+     * @return whether the user selected this bookmark for the panel
      */
-    public boolean isDeleted() {
-        return deleted;
+    public boolean isPanel()
+    {
+        return this.panel;
     }
 
     /**
-     * Mark whether the bookmarked page has been deleted.
-     *
-     * @param deleted the deleted state
-     * @return this bookmark
+     * @param panel whether the user selected this bookmark for the panel
      */
-    public BookmarkEntry withDeletedState(boolean deleted) {
-        this.deleted = deleted;
-        return this;
+    public void setPanel(boolean panel)
+    {
+        this.panel = panel;
     }
 }

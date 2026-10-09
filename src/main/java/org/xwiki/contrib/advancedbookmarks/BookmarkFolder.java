@@ -19,91 +19,89 @@
  */
 package org.xwiki.contrib.advancedbookmarks;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
 /**
- * A bookmark folder that can contain child folders.
+ * A user-defined bookmark folder. Folders form a tree through their parent identifier; the empty identifier
+ * {@link #ROOT} designates the implicit "Uncategorized" root.
+ * <p>
+ * This is a mutable bean so that it can be (de)serialized as JSON.
  *
+ * @version $Id$
  * @since 1.0
  */
-public class BookmarkFolder {
-    private final String id;
-    private final String name;
-    private final String parentId;
-    private final int order;
-    private final boolean uncategorized;
-    private final List<BookmarkFolder> children = new ArrayList<>();
+public class BookmarkFolder
+{
+    /** Identifier of the implicit root folder, which holds uncategorized bookmarks. */
+    public static final String ROOT = "";
 
-    /**
-     * Create a bookmark folder.
-     *
-     * @param id the unique folder identifier
-     * @param name the display name
-     * @param parentId the parent folder identifier
-     * @param order the position among siblings
-     * @param uncategorized whether this is the default folder
-     */
-    public BookmarkFolder(String id, String name, String parentId, int order, boolean uncategorized) {
-        this.id = Objects.requireNonNull(id, "id must not be null");
-        this.name = Objects.requireNonNull(name, "name must not be null");
-        this.parentId = parentId;
-        this.order = order;
-        this.uncategorized = uncategorized;
-    }
+    private String id;
+
+    private String name;
+
+    private String parent = ROOT;
+
+    private int order;
 
     /**
      * @return the unique folder identifier
      */
-    public String getId() {
-        return id;
+    public String getId()
+    {
+        return this.id;
+    }
+
+    /**
+     * @param id the unique folder identifier
+     */
+    public void setId(String id)
+    {
+        this.id = id;
     }
 
     /**
      * @return the display name
      */
-    public String getName() {
-        return name;
+    public String getName()
+    {
+        return this.name;
     }
 
     /**
-     * @return the parent folder identifier
+     * @param name the display name
      */
-    public String getParentId() {
-        return parentId;
+    public void setName(String name)
+    {
+        this.name = name;
+    }
+
+    /**
+     * @return the parent folder identifier, {@link #ROOT} for a top-level folder
+     */
+    public String getParent()
+    {
+        return this.parent;
+    }
+
+    /**
+     * @param parent the parent folder identifier, {@link #ROOT} for a top-level folder
+     */
+    public void setParent(String parent)
+    {
+        this.parent = parent;
     }
 
     /**
      * @return the position among siblings
      */
-    public int getOrder() {
-        return order;
+    public int getOrder()
+    {
+        return this.order;
     }
 
     /**
-     * @return whether this is the default folder
+     * @param order the position among siblings
      */
-    public boolean isUncategorized() {
-        return uncategorized;
-    }
-
-    /**
-     * @return the child folders
-     */
-    public List<BookmarkFolder> getChildren() {
-        return children;
-    }
-
-    /**
-     * Add a child folder.
-     *
-     * @param child the folder to add
-     */
-    public void addChild(BookmarkFolder child) {
-        if (child == null) {
-            return;
-        }
-        children.add(child);
+    public void setOrder(int order)
+    {
+        this.order = order;
     }
 }
