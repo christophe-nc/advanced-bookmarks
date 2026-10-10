@@ -37,6 +37,7 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkStoreConflictException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreException;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkJsonCodec;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkPages;
+import org.xwiki.contrib.advancedbookmarks.internal.BookmarkReferences;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkRequests;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkRights;
 import org.xwiki.contrib.advancedbookmarks.internal.ReferenceStubs;
@@ -63,7 +64,7 @@ import static org.mockito.Mockito.when;
  * @version $Id$
  */
 @ComponentTest
-@ComponentList(BookmarkJsonCodec.class)
+@ComponentList({ BookmarkJsonCodec.class, BookmarkReferences.class })
 class AdvancedBookmarksScriptServiceTest
 {
     private static final DocumentReference ALICE = ReferenceStubs.page("wiki:XWiki.alice");
@@ -126,7 +127,7 @@ class AdvancedBookmarksScriptServiceTest
 
         assertEquals(200, result.get(STATUS));
         assertEquals("wiki:XWiki.alice", result.get("user"));
-        assertEquals(9L, result.get("version"));
+        assertEquals("9", result.get("version"));
         assertEquals(List.of(Map.of("id", "f", "name", "Folder", "parent", "", "order", 0)), result.get("folders"));
         assertEquals(List.of(Map.of("page", PAGE_KEY, "label", "Label", "folder", "", "order", 0, "panel", true,
             "viewable", true, "exists", true, "url", "/bin/view/Space/Page")), result.get("bookmarks"));
@@ -203,7 +204,7 @@ class AdvancedBookmarksScriptServiceTest
         when(this.requests.isPost()).thenReturn(false);
 
         assertEquals(Map.of(STATUS, 405, ERROR, "methodNotAllowed"), this.service.toggle(PAGE_KEY));
-        assertEquals(Map.of(STATUS, 405, ERROR, "methodNotAllowed"), this.service.save("", JSON, 0L));
+        assertEquals(Map.of(STATUS, 405, ERROR, "methodNotAllowed"), this.service.save("", JSON, "0"));
         verifyNoInteractions(this.bookmarkManager);
     }
 
@@ -213,7 +214,7 @@ class AdvancedBookmarksScriptServiceTest
         when(this.requests.hasValidToken()).thenReturn(false);
 
         assertEquals(Map.of(STATUS, 403, ERROR, "invalidToken"), this.service.toggle(PAGE_KEY));
-        assertEquals(Map.of(STATUS, 403, ERROR, "invalidToken"), this.service.save("", JSON, 0L));
+        assertEquals(Map.of(STATUS, 403, ERROR, "invalidToken"), this.service.save("", JSON, "0"));
         verifyNoInteractions(this.bookmarkManager);
     }
 
@@ -230,7 +231,7 @@ class AdvancedBookmarksScriptServiceTest
     {
         when(this.bookmarkManager.save(any(), any())).thenReturn(4L);
 
-        assertEquals(Map.of(STATUS, 200, "version", 4L), this.service.save("bob", JSON, 3L));
+        assertEquals(Map.of(STATUS, 200, "version", "4"), this.service.save("bob", JSON, "3"));
 
         ArgumentCaptor<BookmarkData> data = ArgumentCaptor.forClass(BookmarkData.class);
         verify(this.bookmarkManager).save(org.mockito.ArgumentMatchers.eq(BOB), data.capture());
@@ -239,13 +240,33 @@ class AdvancedBookmarksScriptServiceTest
     }
 
     @Test
+    void exchangesSolrVersionsWithoutLosingPrecision() throws Exception
+    {
+        // Solr versions exceed 2^53, the integer precision of JavaScript numbers.
+        long solrVersion = 1_812_345_678_901_234_567L;
+        BookmarkData stored = new BookmarkData();
+        stored.setVersion(solrVersion);
+        when(this.bookmarkManager.getBookmarks(ALICE)).thenReturn(stored);
+        when(this.bookmarkManager.save(any(), any())).thenReturn(solrVersion + 1);
+
+        assertEquals("1812345678901234567", this.service.getBookmarks("").get("version"));
+        assertEquals("1812345678901234568", this.service.save("", JSON, "1812345678901234567").get("version"));
+
+        ArgumentCaptor<BookmarkData> data = ArgumentCaptor.forClass(BookmarkData.class);
+        verify(this.bookmarkManager).save(org.mockito.ArgumentMatchers.eq(ALICE), data.capture());
+        assertEquals(solrVersion, data.getValue().getVersion());
+    }
+
+    @Test
     void rejectsInvalidSavedData() throws Exception
     {
-        assertEquals(Map.of(STATUS, 400, ERROR, "invalid"), this.service.save("", "{", 0L));
-        assertEquals(Map.of(STATUS, 400, ERROR, "invalid"), this.service.save("", JSON, -1L));
+        assertEquals(Map.of(STATUS, 400, ERROR, "invalid"), this.service.save("", "{", "0"));
+        assertEquals(Map.of(STATUS, 400, ERROR, "invalid"), this.service.save("", JSON, "-1"));
+        assertEquals(Map.of(STATUS, 400, ERROR, "invalid"), this.service.save("", JSON, "1.5"));
+        assertEquals(Map.of(STATUS, 400, ERROR, "invalid"), this.service.save("", JSON, null));
 
         when(this.bookmarkManager.save(any(), any())).thenThrow(new BookmarkInvalidDataException(null));
-        assertEquals(Map.of(STATUS, 400, ERROR, "invalid"), this.service.save("", JSON, 0L));
+        assertEquals(Map.of(STATUS, 400, ERROR, "invalid"), this.service.save("", JSON, "0"));
     }
 
     @Test
@@ -253,7 +274,7 @@ class AdvancedBookmarksScriptServiceTest
     {
         when(this.bookmarkManager.save(any(), any())).thenThrow(new BookmarkStoreConflictException(null));
 
-        Map<String, Object> result = this.service.save("", JSON, 2L);
+        Map<String, Object> result = this.service.save("", JSON, "2");
 
         assertEquals(Map.of(STATUS, 409, ERROR, "conflict"), result);
         assertFalse(result.containsKey("version"));

@@ -10,17 +10,21 @@ The Java part can only be installed at farm level: the Solr core it creates is s
 
 The installing user must be an administrator of the wiki: the star is only displayed when the author of its UI extension has the administration right.
 
+Upgrading the extension replaces a farm-level JAR, after which XWiki reloads the other farm-level JAR extensions. Some of them may log warnings or errors during this reload (for instance *Likes*: "Right unregistration is disabled on purpose…"); an extension whose components fail to reload stays partly inactive until XWiki is restarted. Plan upgrades with a restart of XWiki.
+
 ## Usage
 
 - **Star**: a star button is added to the action bar of every page (next to *Edit* and *Create*), for logged-in users. It adds the page to the uncategorized bookmarks, or removes it. It is not displayed on the pages of the extension itself.
 - **Panel**: the *Bookmarks* panel (`Panels.MyBookmarks`) lists the bookmarks selected for the panel, or the first ten, with a link to the management page. It is not added to the page layout automatically: add it in *Administration > Look & Feel > Panels*. Deleted pages are struck through; pages the user cannot view are shown without link.
+- **Management page**: `AdvancedBookmarks.WebHome` displays the `{{bookmarks/}}` macro, which can also be used in any other page. Users organize their bookmarks in folders and subfolders, by drag and drop or with the keyboard (arrow buttons and *Move to* lists), rename them, select up to ten bookmarks for the panel and filter the list. Changes are saved automatically; if the bookmarks were modified meanwhile (another tab, the star), they are reloaded.
+- **Administrators** get a user picker on the management page: the chosen user's bookmarks open in a new tab (`AdvancedBookmarks.WebHome?user=XWiki.jdoe`), with a banner recalling whose bookmarks are displayed. The server checks the administration right on every request.
 
 ## Modules
 
 | Module | Packaging | Content |
 | --- | --- | --- |
-| `advanced-bookmarks-api` | JAR | Storage, business logic, rights, script service and translations. |
-| `advanced-bookmarks-ui` | XAR | Wiki pages: JSON service, star and panel. |
+| `advanced-bookmarks-api` | JAR | Storage, business logic, rights, script service, `{{bookmarks/}}` macro with its JavaScript and CSS, and translations. |
+| `advanced-bookmarks-ui` | XAR | Wiki pages: JSON service, star, panel and management page. |
 
 ## Access rules
 

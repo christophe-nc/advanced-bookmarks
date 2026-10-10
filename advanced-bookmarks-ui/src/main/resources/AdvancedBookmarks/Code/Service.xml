@@ -58,12 +58,8 @@
   #elseif ($operation == 'getBookmarks')
     #set ($result = $services.advancedbookmarks.getBookmarks("$!request.user"))
   #elseif ($operation == 'save')
-    #set ($version = $numbertool.toNumber("$!request.version"))
-    #if ("$!version" == '')
-      #set ($result = {'status': 400, 'error': 'invalid'})
-    #else
-      #set ($result = $services.advancedbookmarks.save("$!request.user", "$!request.data", $version.longValue()))
-    #end
+    ## The version stays a string: Solr versions exceed the precision of floating-point numbers.
+    #set ($result = $services.advancedbookmarks.save("$!request.user", "$!request.data", "$!request.version"))
   #else
     #set ($result = {'status': 400, 'error': 'unknownOperation'})
   #end

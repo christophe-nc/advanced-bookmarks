@@ -31,7 +31,9 @@ import org.xwiki.test.junit5.mockito.ComponentTest;
 import org.xwiki.test.junit5.mockito.InjectMockComponents;
 import org.xwiki.test.junit5.mockito.MockComponent;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -88,11 +90,20 @@ class BookmarkRequestsTest
     }
 
     @Test
+    void readsARequestParameter()
+    {
+        when(this.httpRequest.getParameter("user")).thenReturn("XWiki.bob");
+
+        assertEquals("XWiki.bob", this.requests.getParameter("user"));
+    }
+
+    @Test
     void refusesEverythingOutsideOfAnHttpRequest()
     {
         when(this.container.getRequest()).thenReturn(null);
         assertFalse(this.requests.isPost());
         assertFalse(this.requests.hasValidToken());
+        assertNull(this.requests.getParameter("user"));
 
         when(this.container.getRequest()).thenReturn(mock(Request.class));
         assertFalse(this.requests.isPost());

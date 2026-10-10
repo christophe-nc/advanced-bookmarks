@@ -78,6 +78,16 @@ public class BookmarkPages
     }
 
     /**
+     * @param user a user
+     * @return the display name of the user, as plain text
+     */
+    public String getUserName(DocumentReference user)
+    {
+        XWikiContext xcontext = this.contextProvider.get();
+        return xcontext.getWiki().getPlainUserName(user, xcontext);
+    }
+
+    /**
      * @param page an existing page
      * @return the title of the page as plain text, or an empty string if it cannot be computed
      */

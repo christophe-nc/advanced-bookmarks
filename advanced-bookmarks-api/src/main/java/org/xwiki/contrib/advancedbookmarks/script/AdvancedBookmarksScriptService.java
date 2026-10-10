@@ -41,12 +41,11 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkManager;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreConflictException;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkJsonCodec;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkPages;
+import org.xwiki.contrib.advancedbookmarks.internal.BookmarkReferences;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkRequests;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkRights;
-import org.xwiki.model.EntityType;
 import org.xwiki.model.reference.DocumentReference;
 import org.xwiki.model.reference.DocumentReferenceResolver;
-import org.xwiki.model.reference.EntityReference;
 import org.xwiki.model.reference.EntityReferenceSerializer;
 import org.xwiki.script.service.ScriptService;
 
@@ -76,8 +75,6 @@ public class AdvancedBookmarksScriptService implements ScriptService
 
     private static final String ORDER = "order";
 
-    private static final EntityReference USER_SPACE = new EntityReference("XWiki", EntityType.SPACE);
-
     private static final int OK = 200;
 
     private static final int BAD_REQUEST = 400;
@@ -104,6 +101,9 @@ public class AdvancedBookmarksScriptService implements ScriptService
 
     @Inject
     private BookmarkRequests requests;
+
+    @Inject
+    private BookmarkReferences references;
 
     @Inject
     @Named("current")
@@ -135,11 +135,11 @@ public class AdvancedBookmarksScriptService implements ScriptService
     public Map<String, Object> getBookmarks(String user)
     {
         return execute(() -> {
-            DocumentReference owner = resolveUser(user);
+            DocumentReference owner = this.references.resolveUser(user);
             BookmarkData data = this.bookmarkManager.getBookmarks(owner);
             Map<String, Object> result = success();
             result.put("user", this.serializer.serialize(owner));
-            result.put(VERSION, data.getVersion());
+            result.put(VERSION, String.valueOf(data.getVersion()));
             result.put("folders", data.getFolders().stream().map(AdvancedBookmarksScriptService::toMap).toList());
             result.put(BOOKMARKS, toMaps(this.bookmarkManager.getDisplayOrder(data)));
             return result;
@@ -166,7 +166,7 @@ public class AdvancedBookmarksScriptService implements ScriptService
     public Map<String, Object> isBookmarked(String page)
     {
         return execute(() -> bookmarked(
-            this.bookmarkManager.isBookmarked(this.rights.getCurrentUser(), resolvePage(page))));
+            this.bookmarkManager.isBookmarked(this.rights.getCurrentUser(), this.references.resolvePage(page))));
     }
 
     /**
@@ -178,7 +178,7 @@ public class AdvancedBookmarksScriptService implements ScriptService
     public Map<String, Object> toggle(String page)
     {
         return executeWrite(() -> bookmarked(
-            this.bookmarkManager.toggle(this.rights.getCurrentUser(), resolvePage(page))));
+            this.bookmarkManager.toggle(this.rights.getCurrentUser(), this.references.resolvePage(page))));
     }
 
     /**
@@ -186,22 +186,37 @@ public class AdvancedBookmarksScriptService implements ScriptService
      *
      * @param user the owner of the bookmarks; empty for the current user
      * @param json the folders and bookmarks, as a JSON object with the {@code folders} and {@code bookmarks} arrays
-     * @param version the version the bookmarks were read at, {@code 0} if there were none
+     * @param version the version the bookmarks were read at, as returned by {@link #getBookmarks(String)}; {@code 0}
+     *            if there were none
      * @return the new version, under the {@code version} key
      */
-    public Map<String, Object> save(String user, String json, long version)
+    public Map<String, Object> save(String user, String json, String version)
     {
         return executeWrite(() -> {
-            if (version < 0) {
-                throw new BookmarkInvalidDataException(null);
-            }
-            DocumentReference owner = resolveUser(user);
+            DocumentReference owner = this.references.resolveUser(user);
             BookmarkData data = this.jsonCodec.read(json);
-            data.setVersion(version);
+            data.setVersion(parseVersion(version));
             Map<String, Object> result = success();
-            result.put(VERSION, this.bookmarkManager.save(owner, data));
+            result.put(VERSION, String.valueOf(this.bookmarkManager.save(owner, data)));
             return result;
         });
+    }
+
+    /**
+     * Versions are exchanged as decimal strings: the versions of Solr exceed the integer precision of JavaScript
+     * numbers (2^53), and a rounded version would always be reported as a conflict.
+     */
+    private static long parseVersion(String version) throws BookmarkInvalidDataException
+    {
+        try {
+            long result = Long.parseLong(StringUtils.defaultString(version));
+            if (result >= 0) {
+                return result;
+            }
+        } catch (NumberFormatException e) {
+            // Reported below as invalid data, without detail.
+        }
+        throw new BookmarkInvalidDataException(null);
     }
 
     private Map<String, Object> executeWrite(Operation operation)
@@ -228,35 +243,6 @@ public class AdvancedBookmarksScriptService implements ScriptService
         } catch (BookmarkException e) {
             this.logger.error("Advanced Bookmarks operation failed.", e);
             return error(SERVER_ERROR, "storageError");
-        }
-    }
-
-    /**
-     * The current user is always taken from the context; a user name sent by the browser is only a request to manage
-     * someone else's bookmarks, which the manager authorizes or refuses.
-     */
-    private DocumentReference resolveUser(String user) throws BookmarkException
-    {
-        if (StringUtils.isBlank(user)) {
-            return this.rights.getCurrentUser();
-        }
-        checkReferenceLength(user);
-        return this.resolver.resolve(user, USER_SPACE);
-    }
-
-    private DocumentReference resolvePage(String page) throws BookmarkInvalidDataException
-    {
-        if (StringUtils.isBlank(page)) {
-            throw new BookmarkInvalidDataException(null);
-        }
-        checkReferenceLength(page);
-        return this.resolver.resolve(page);
-    }
-
-    private static void checkReferenceLength(String reference) throws BookmarkInvalidDataException
-    {
-        if (reference.length() > BookmarkJsonCodec.MAX_PAGE_REFERENCE_LENGTH) {
-            throw new BookmarkInvalidDataException(null);
         }
     }
 

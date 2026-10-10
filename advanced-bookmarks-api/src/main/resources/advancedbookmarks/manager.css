@@ -1,0 +1,292 @@
+/*
+ * See the NOTICE file distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2.1 of
+ * the License, or (at your option) any later version.
+ *
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this software; if not, write to the Free
+ * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
+ */
+/* Bookmark management interface of the {{bookmarks/}} macro. */
+
+/* User picker of administrators */
+.advanced-bookmarks-user-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5em;
+  padding: .6em .8em;
+  margin-bottom: 1em;
+  background: #f4f6f8;
+  border: 1px solid #dde2e6;
+  border-radius: 4px;
+}
+.advanced-bookmarks-user-picker label {
+  margin: 0;
+}
+.advanced-bookmarks-user-picker .selectize-control {
+  flex: 1 1 16em;
+  max-width: 28em;
+}
+
+/* Toolbar */
+.advanced-bookmarks-toolbar {
+  margin-bottom: .8em;
+}
+.advanced-bookmarks-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .6em;
+}
+.advanced-bookmarks-toolbar-row + .advanced-bookmarks-toolbar-row {
+  margin-top: .6em;
+}
+.advanced-bookmarks-filter {
+  flex: 1 1 14em;
+  max-width: 24em;
+  padding: .3em .6em;
+  border: 1px solid #ccd2d8;
+  border-radius: 4px;
+}
+.advanced-bookmarks-counter {
+  font-size: .9em;
+  padding: .2em .6em;
+  border-radius: 1em;
+  background: #fff4cc;
+  color: #6b5200;
+}
+.advanced-bookmarks-counter-full {
+  background: #ffe1a6;
+  font-weight: bold;
+}
+.advanced-bookmarks-status {
+  font-size: .85em;
+  color: #6c757d;
+  margin-left: auto;
+}
+.advanced-bookmarks-status-success {
+  color: #2e7d32;
+}
+.advanced-bookmarks-status-error {
+  color: #c62828;
+}
+.advanced-bookmarks-message {
+  color: #6c757d;
+  font-style: italic;
+}
+
+/* Tree */
+.advanced-bookmarks-tree,
+.advanced-bookmarks-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.advanced-bookmarks-children {
+  padding-left: 1.4em;
+  border-left: 1px dashed #dde2e6;
+  margin-left: .7em;
+}
+.advanced-bookmarks-collapsed > .advanced-bookmarks-children {
+  display: none;
+}
+.advanced-bookmarks-folder {
+  margin: .15em 0;
+}
+.advanced-bookmarks-folder-header,
+.advanced-bookmarks-bookmark {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  padding: .25em .4em;
+  border-radius: 4px;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+}
+.advanced-bookmarks-folder-header {
+  background: #f4f6f8;
+  font-weight: bold;
+}
+.advanced-bookmarks-folder-header[draggable="true"] {
+  cursor: grab;
+}
+.advanced-bookmarks-uncategorized > .advanced-bookmarks-folder-header {
+  background: #eef3f8;
+  font-style: italic;
+}
+.advanced-bookmarks-bookmark:hover,
+.advanced-bookmarks-folder-header:hover {
+  background: #eaf1fb;
+}
+.advanced-bookmarks-bookmark-panel {
+  background: #fffaf0;
+}
+.advanced-bookmarks-bookmark-auto {
+  background: #fffcf5;
+  box-shadow: inset 3px 0 0 #f0d58a;
+}
+.advanced-bookmarks-toggle {
+  border: none;
+  background: none;
+  width: 1.4em;
+  padding: 0;
+  cursor: pointer;
+  color: #555;
+}
+.advanced-bookmarks-folder-name::before {
+  content: "\1F4C1";
+  margin-right: .35em;
+  font-weight: normal;
+}
+.advanced-bookmarks-uncategorized .advanced-bookmarks-folder-name::before {
+  content: "\1F4E5";
+}
+.advanced-bookmarks-count {
+  font-size: .8em;
+  font-weight: normal;
+  color: #6c757d;
+  background: #fff;
+  border: 1px solid #dde2e6;
+  border-radius: 1em;
+  padding: 0 .5em;
+}
+.advanced-bookmarks-handle {
+  cursor: grab;
+  color: #9aa3ab;
+  font-size: 1.1em;
+  user-select: none;
+}
+.advanced-bookmarks-panel {
+  margin: 0;
+  font-weight: normal;
+  font-size: .85em;
+  white-space: nowrap;
+  color: #6c757d;
+  cursor: pointer;
+}
+.advanced-bookmarks-panel-selected {
+  color: #8a5a00;
+  font-weight: bold;
+}
+.advanced-bookmarks-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.advanced-bookmarks-link {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.advanced-bookmarks-link-unavailable {
+  color: #8a8a8a;
+  text-decoration: line-through;
+}
+.advanced-bookmarks-badge {
+  display: inline-block;
+  text-decoration: none;
+  font-size: .75em;
+  color: #c62828;
+  border: 1px solid #f1b0b0;
+  border-radius: 3px;
+  padding: 0 .35em;
+}
+.advanced-bookmarks-path {
+  font-size: .8em;
+  color: #6c757d;
+}
+.advanced-bookmarks-empty {
+  color: #9aa3ab;
+  font-style: italic;
+  font-size: .9em;
+  padding: .3em .4em;
+  border: 2px solid transparent;
+  border-radius: 4px;
+}
+
+/* Actions: discreet, visible on hover or with the keyboard */
+.advanced-bookmarks-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: .15em;
+  margin-left: auto;
+  opacity: .35;
+  transition: opacity .15s ease;
+  font-weight: normal;
+}
+.advanced-bookmarks-bookmark:hover .advanced-bookmarks-actions,
+.advanced-bookmarks-folder-header:hover .advanced-bookmarks-actions,
+.advanced-bookmarks-actions:focus-within {
+  opacity: 1;
+}
+.advanced-bookmarks-button {
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 3px;
+  padding: 0 .35em;
+  line-height: 1.6;
+  color: #555;
+  cursor: pointer;
+}
+.advanced-bookmarks-button:hover,
+.advanced-bookmarks-button:focus-visible {
+  border-color: #ccd2d8;
+  background: #fff;
+}
+.advanced-bookmarks-button-danger:hover {
+  color: #c62828;
+  border-color: #f1b0b0;
+}
+.advanced-bookmarks-move {
+  max-width: 10em;
+  font-size: .85em;
+  padding: 0 .2em;
+  height: 1.8em;
+}
+.advanced-bookmarks-edit {
+  flex: 1 1 auto;
+  min-width: 8em;
+  padding: .1em .4em;
+  font-weight: normal;
+}
+
+/* Drag and drop */
+.advanced-bookmarks-dragged {
+  opacity: .45;
+}
+.advanced-bookmarks-drop-before {
+  border-top-color: #1f6feb;
+}
+.advanced-bookmarks-drop-after {
+  border-bottom-color: #1f6feb;
+}
+.advanced-bookmarks-drop-inside {
+  background: #dbe9ff;
+  outline: 2px dashed #1f6feb;
+}
+
+/* Small screens: actions always visible, no drag handle */
+@media (max-width: 768px) {
+  .advanced-bookmarks-actions {
+    opacity: 1;
+  }
+  .advanced-bookmarks-bookmark,
+  .advanced-bookmarks-folder-header {
+    flex-wrap: wrap;
+  }
+  .advanced-bookmarks-handle {
+    display: none;
+  }
+}

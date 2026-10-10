@@ -102,6 +102,14 @@ class BookmarkPagesTest
     }
 
     @Test
+    void computesTheUserName()
+    {
+        when(this.xwiki.getPlainUserName(PAGE, this.xcontext)).thenReturn("Alice Doe");
+
+        assertEquals("Alice Doe", this.pages.getUserName(PAGE));
+    }
+
+    @Test
     void computesThePlainTitle() throws Exception
     {
         XWikiDocument document = mock(XWikiDocument.class);

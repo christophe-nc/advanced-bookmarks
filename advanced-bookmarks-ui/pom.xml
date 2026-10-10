@@ -68,5 +68,27 @@
       <version>${platform.version}</version>
       <scope>runtime</scope>
     </dependency>
+    <!-- The translation macro, used by the help text of the management page. -->
+    <dependency>
+      <groupId>org.xwiki.platform</groupId>
+      <artifactId>xwiki-platform-localization-macro</artifactId>
+      <version>${platform.version}</version>
+      <scope>runtime</scope>
+    </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.xwiki.commons</groupId>
+        <artifactId>xwiki-commons-tool-xar-plugin</artifactId>
+        <configuration>
+          <!-- The management page is meant to be visited by users; the other pages are technical and hidden. -->
+          <contentPages>
+            <contentPage>.*/AdvancedBookmarks/WebHome\.xml</contentPage>
+          </contentPages>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 </project>

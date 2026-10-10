@@ -5,3 +5,4 @@ target/
 .DS_Store
 _reference/
 container-backup.tar
+target-eclipse/

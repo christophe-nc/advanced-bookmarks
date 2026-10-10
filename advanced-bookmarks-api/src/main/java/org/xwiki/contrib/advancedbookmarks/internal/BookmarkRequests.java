@@ -68,6 +68,16 @@ public class BookmarkRequests
         return request != null && this.csrfToken.isTokenValid(request.getParameter(TOKEN_PARAMETER));
     }
 
+    /**
+     * @param name the name of a request parameter
+     * @return the value of the parameter, or {@code null} if it is missing or outside of an HTTP request
+     */
+    public String getParameter(String name)
+    {
+        HttpServletRequest request = getHttpRequest();
+        return request != null ? request.getParameter(name) : null;
+    }
+
     private HttpServletRequest getHttpRequest()
     {
         Request request = this.container.getRequest();
