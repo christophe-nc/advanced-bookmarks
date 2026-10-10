@@ -68,6 +68,8 @@ class BookmarksMacroTest
 
     private static final DocumentReference BOB = ReferenceStubs.page("wiki:XWiki.bob");
 
+    private static final String ALICE_NAME = "XWiki.alice";
+
     private static final String BOB_NAME = "XWiki.bob";
 
     private static final String CLASS = "class";
@@ -221,6 +223,78 @@ class BookmarksMacroTest
     }
 
     @Test
+    void displaysTheBookmarksOfTheUserOfTheProfileToThisUser() throws Exception
+    {
+        when(this.references.resolveUser(ALICE_NAME)).thenReturn(ALICE);
+        when(this.rights.isAdmin()).thenReturn(true);
+
+        List<Block> blocks = execute(ALICE_NAME);
+
+        assertEquals(1, blocks.size());
+        // No user picker: the profile only shows the bookmarks of its own user.
+        assertEquals(Map.of(CLASS, CONTAINER, USER, "wiki:XWiki.alice", PANEL_LIMIT, "15"),
+            blocks.get(0).getParameters());
+        verifyNoInteractions(this.jsfx, this.wikiUserManager);
+    }
+
+    @Test
+    void displaysTheBookmarksOfTheUserOfTheProfileToAnAdministrator() throws Exception
+    {
+        when(this.references.resolveUser(BOB_NAME)).thenReturn(BOB);
+        when(this.rights.canManage(BOB)).thenReturn(true);
+        when(this.rights.isAdmin()).thenReturn(true);
+        when(this.pages.getUserName(BOB)).thenReturn("Bob");
+
+        List<Block> blocks = execute(BOB_NAME);
+
+        assertEquals(2, blocks.size());
+        assertMessage(blocks.get(0), "box infomessage", "advancedbookmarks.manager.otherUser[Bob]");
+        assertEquals(Map.of(CLASS, CONTAINER, USER, "wiki:XWiki.bob", PANEL_LIMIT, "15"),
+            blocks.get(1).getParameters());
+        verifyNoInteractions(this.jsfx, this.wikiUserManager);
+    }
+
+    @Test
+    void refusesTheBookmarksOfTheUserOfTheProfileToOtherUsers() throws Exception
+    {
+        when(this.references.resolveUser(BOB_NAME)).thenReturn(BOB);
+
+        assertForbidden(BOB_NAME);
+    }
+
+    @Test
+    void prefersTheMacroParameterToTheRequestParameter() throws Exception
+    {
+        // Alice cannot override the user of the profile of Bob from the URL.
+        when(this.requests.getParameter(BookmarksMacro.USER_PARAMETER)).thenReturn(ALICE_NAME);
+        when(this.references.resolveUser(BOB_NAME)).thenReturn(BOB);
+
+        assertForbidden(BOB_NAME);
+        verify(this.references, never()).resolveUser(ALICE_NAME);
+    }
+
+    @Test
+    void ignoresABlankMacroParameter() throws Exception
+    {
+        when(this.requests.getParameter(BookmarksMacro.USER_PARAMETER)).thenReturn(BOB_NAME);
+        when(this.references.resolveUser(BOB_NAME)).thenReturn(BOB);
+        when(this.rights.canManage(BOB)).thenReturn(true);
+
+        List<Block> blocks = execute(" ");
+
+        assertEquals("wiki:XWiki.bob", blocks.get(1).getParameters().get(USER));
+    }
+
+    @Test
+    void refusesAnInvalidMacroParameter() throws Exception
+    {
+        when(this.references.resolveUser("invalid")).thenThrow(new BookmarkInvalidDataException(null));
+
+        assertForbidden("invalid");
+        verify(this.rights).canManage(null);
+    }
+
+    @Test
     void isNotAnInlineMacro()
     {
         assertFalse(this.macro.supportsInlineMode());
@@ -228,7 +302,12 @@ class BookmarksMacroTest
 
     private void assertForbidden()
     {
-        List<Block> blocks = execute();
+        assertForbidden(null);
+    }
+
+    private void assertForbidden(String user)
+    {
+        List<Block> blocks = execute(user);
 
         assertEquals(1, blocks.size());
         assertMessage(blocks.get(0), "box errormessage", "advancedbookmarks.manager.forbidden[]");
@@ -238,7 +317,15 @@ class BookmarksMacroTest
 
     private List<Block> execute()
     {
-        return this.macro.execute(null, null, null);
+        return execute(null);
+    }
+
+    private List<Block> execute(String user)
+    {
+        BookmarksMacroParameters parameters = new BookmarksMacroParameters();
+        parameters.setUser(user);
+        assertEquals(user, parameters.getUser());
+        return this.macro.execute(parameters, null, null);
     }
 
     private static void assertMessage(Block block, String cssClass, String text)

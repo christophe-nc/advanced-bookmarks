@@ -38,7 +38,7 @@ import org.xwiki.rendering.block.Block;
 import org.xwiki.rendering.block.GroupBlock;
 import org.xwiki.rendering.block.ParagraphBlock;
 import org.xwiki.rendering.block.WordBlock;
-import org.xwiki.rendering.macro.AbstractNoParameterMacro;
+import org.xwiki.rendering.macro.AbstractMacro;
 import org.xwiki.rendering.transformation.MacroTransformationContext;
 import org.xwiki.skinx.SkinExtension;
 import org.xwiki.wiki.user.WikiUserManager;
@@ -49,7 +49,8 @@ import org.xwiki.wiki.user.WikiUserManagerException;
  * which the renderer escapes: the interface itself is built in the browser by {@code advancedbookmarks/manager.js},
  * from the data attributes of the container.
  * <p>
- * The managed user is the current user or, for an administrator, the user given in the {@code user} request parameter.
+ * The managed user is the one given in the {@code user} macro parameter (the user profile tab gives the user of the
+ * profile), else the one given in the {@code user} request parameter (used by administrators), else the current user.
  * The access is always checked on the server.
  *
  * @version $Id$
@@ -58,7 +59,7 @@ import org.xwiki.wiki.user.WikiUserManagerException;
 @Component
 @Named("bookmarks")
 @Singleton
-public class BookmarksMacro extends AbstractNoParameterMacro
+public class BookmarksMacro extends AbstractMacro<BookmarksMacroParameters>
 {
     /** The request parameter used by administrators to manage the bookmarks of another user. */
     public static final String USER_PARAMETER = "user";
@@ -117,7 +118,8 @@ public class BookmarksMacro extends AbstractNoParameterMacro
      */
     public BookmarksMacro()
     {
-        super("Bookmarks", "Manage the bookmarks of the current user: folders, order and panel selection.");
+        super("Bookmarks", "Manage the bookmarks of the current user: folders, order and panel selection.",
+            BookmarksMacroParameters.class);
         setDefaultCategories(Set.of(DEFAULT_CATEGORY_NAVIGATION));
     }
 
@@ -128,15 +130,21 @@ public class BookmarksMacro extends AbstractNoParameterMacro
     }
 
     @Override
-    public List<Block> execute(Object parameters, String content, MacroTransformationContext context)
+    public List<Block> execute(BookmarksMacroParameters parameters, String content,
+        MacroTransformationContext context)
     {
         DocumentReference currentUser = this.rights.getCurrentUser();
         if (currentUser == null) {
             return List.of(message("warningmessage", "loginRequired"));
         }
+        // A user set by the page (the profile tab) wins over the request: a profile only shows the bookmarks of its own
+        // user, whatever the URL says.
+        String fixedUser = parameters.getUser();
+        boolean isUserFixed = fixedUser != null && !fixedUser.isBlank();
         DocumentReference owner;
         try {
-            owner = this.references.resolveUser(this.requests.getParameter(USER_PARAMETER));
+            owner = this.references
+                .resolveUser(isUserFixed ? fixedUser : this.requests.getParameter(USER_PARAMETER));
         } catch (BookmarkInvalidDataException e) {
             owner = null;
         }
@@ -151,7 +159,8 @@ public class BookmarksMacro extends AbstractNoParameterMacro
         attributes.put(CLASS, CONTAINER_CLASS);
         attributes.put("data-user", this.serializer.serialize(owner));
         attributes.put("data-panel-limit", String.valueOf(this.configuration.getPanelLimit()));
-        if (this.rights.isAdmin()) {
+        // The user picker opens the current page for another user, which is pointless when the user is fixed.
+        if (!isUserFixed && this.rights.isAdmin()) {
             this.jsfx.use(USER_PICKER);
             attributes.put("data-admin", "true");
             String userScope = getUserScope();

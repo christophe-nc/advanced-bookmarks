@@ -19,6 +19,8 @@ Upgrading the extension replaces a farm-level JAR, after which XWiki reloads the
 - **Management page**: `AdvancedBookmarks.WebHome` displays the `{{bookmarks/}}` macro, which can also be used in any other page. Users organize their bookmarks in folders and subfolders, by drag and drop or with the keyboard (arrow buttons and *Move to* lists), rename them, select bookmarks for the panel (up to the configured panel size) and filter the list. Changes are saved automatically; if the bookmarks were modified meanwhile (another tab, the star), they are reloaded.
 - **Export and import**: the *Export* button of the management page downloads the bookmarks as a JSON file. *Import…* reads such a file (1 MB at most) and, after confirmation, either adds it to the current bookmarks or replaces them. When adding, an imported folder is merged with the folder of the same name (ignoring case) at the same place, other folders are created, imported items come after the existing ones of their folder, and pages already bookmarked are skipped: importing an export of the same bookmarks changes nothing. Page references are exported without their wiki, so a file can be imported into another wiki or farm; pages of another wiki and excluded pages found in a file are skipped.
 - **Administrators** get a user picker on the management page: the chosen user's bookmarks open in a new tab (`AdvancedBookmarks.WebHome?user=XWiki.jdoe`), with a banner recalling whose bookmarks are displayed. The server checks the administration right on every request.
+- **Profile tab**: a *Bookmarks* tab is added to the user profile. It displays the same management interface for the user of the profile, and is only shown to this user and to the administrators of the wiki; anyone else reaching it gets an error message instead of the bookmarks. Bookmarks are kept for each wiki: the profile of a global user, which is on the main wiki, shows the bookmarks of the main wiki only.
+- **Macro parameter**: `{{bookmarks user="XWiki.jdoe"/}}` displays the bookmarks of the given user instead of the current one (this is what the profile tab does). The parameter takes precedence over the `user` request parameter, and no user picker is displayed. Only the user and the administrators of the wiki can view these bookmarks.
 
 ## Configuration
 
@@ -37,7 +39,7 @@ The pages of the extension itself (the `AdvancedBookmarks` space and `Panels.MyB
 | Module | Packaging | Content |
 | --- | --- | --- |
 | `advanced-bookmarks-api` | JAR | Storage, business logic, rights, script service, `{{bookmarks/}}` macro with its JavaScript and CSS, and translations. |
-| `advanced-bookmarks-ui` | XAR | Wiki pages: JSON service, star, panel, management page and configuration. |
+| `advanced-bookmarks-ui` | XAR | Wiki pages: JSON service, star, panel, management page, profile tab and configuration. |
 
 ## Access rules
 
