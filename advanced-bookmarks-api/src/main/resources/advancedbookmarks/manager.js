@@ -19,7 +19,7 @@
  */
 /*
  * Bookmark management interface, displayed by the {{bookmarks/}} macro: folder tree, drag and drop, keyboard
- * reordering, inline renaming, panel selection and automatic saving with conflict detection.
+ * reordering, inline renaming, panel selection, automatic saving with conflict detection, export and import.
  *
  * Security: every text coming from the server or the user is inserted with textContent or as an attribute value,
  * never as HTML. The server checks all the rights again.
@@ -61,6 +61,20 @@ define('advanced-bookmarks-manager-messages', {
     'manager.collapse',
     'manager.labelPlaceholder',
     'manager.userPicker',
+    'manager.export',
+    'manager.import',
+    'manager.exportFailed',
+    'manager.importTooLarge',
+    'manager.importFile',
+    'manager.importMerge',
+    'manager.importReplace',
+    'manager.importReplaceWarning',
+    'manager.importConfirm',
+    'manager.cancel',
+    'manager.importing',
+    'manager.importDone',
+    'manager.importFailed',
+    'manager.importInvalid',
     'error.forbidden',
     'error.invalidToken',
     'error.methodNotAllowed',
@@ -79,6 +93,9 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages
   var MAX_FOLDER_NAME_LENGTH = 100;
   var MAX_LABEL_LENGTH = 200;
   var SAVE_DELAY = 400;
+  // Mirror of BookmarkJsonCodec.MAX_JSON_BYTES: a larger file would be rejected by the server anyway.
+  var MAX_FILE_BYTES = 1048576;
+  var BAD_REQUEST = 400;
   var CONFLICT = 409;
   var ROOT = '';
   // Key of the uncategorized folder in the collapsed folders, since its identifier is empty.
@@ -139,6 +156,11 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages
     });
   };
 
+  // Identifiers for the elements of a container, which may be displayed several times on a page.
+  var uniqueId = function(prefix) {
+    return prefix + Math.random().toString(36).slice(2, 9);
+  };
+
   var normalizeForSearch = function(text) {
     return String(text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   };
@@ -147,7 +169,7 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages
    * Administrators open the bookmarks of another user in a new tab, using the user picker of XWiki.
    */
   var createUserPicker = function(container) {
-    var id = 'advanced-bookmarks-user-' + Math.random().toString(36).slice(2, 9);
+    var id = uniqueId('advanced-bookmarks-user-');
     var select = createElement('select', {id: id, 'data-userScope': container.getAttribute('data-user-scope')});
     var picker = createElement('div', {className: 'advanced-bookmarks-user-picker'}, [
       createElement('label', {'for': id, text: t('userPicker')}),
@@ -373,6 +395,15 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages
       });
     };
 
+    // Load the bookmarks again; a failure is displayed rather than propagated.
+    var reload = function() {
+      return load().then(function() {
+        showStatus('', '');
+      }, function(error) {
+        showStatus(t('loadFailed') + ' ' + error.message, 'error');
+      });
+    };
+
     // Automatic saving: changes are grouped, and a single save runs at a time.
     var saveTimer = null;
     var saving = false;
@@ -413,13 +444,9 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages
           // Modified meanwhile (another tab, the star): the stored bookmarks win and are displayed again.
           saveAgain = false;
           notify(t('conflict'), 'warning');
-          return load().then(function() {
-            showStatus('', '');
-          });
+          return reload();
         }
         showStatus(t('saveFailed') + ' ' + error.message, 'error', true);
-      }).catch(function(error) {
-        showStatus(t('loadFailed') + ' ' + error.message, 'error');
       }).then(function() {
         saving = false;
         if (saveAgain) {
@@ -441,14 +468,24 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages
     var panelCounter = createElement('span', {className: 'advanced-bookmarks-counter'});
     var status = createElement('span', {className: 'advanced-bookmarks-status', role: 'status',
       'aria-live': 'polite'});
+    // The file input is hidden behind the "Import" button, whose label is translated, unlike the native one.
+    var importFileInput = createElement('input', {type: 'file', accept: '.json,application/json',
+      className: 'hidden', 'data-action': 'importFile', 'aria-hidden': 'true', tabIndex: -1});
+    var importForm = createElement('div', {className: 'advanced-bookmarks-import', hidden: true});
     // The filter has its own line: next to the "New folder" button, it looked like the field to name the folder.
     var toolbar = createElement('div', {className: 'advanced-bookmarks-toolbar'}, [
       createElement('div', {className: 'advanced-bookmarks-toolbar-row'}, [
         createElement('button', {type: 'button', className: 'btn btn-primary btn-sm', 'data-action': 'newFolder',
           text: '+ ' + t('newFolder')}),
+        createElement('button', {type: 'button', className: 'btn btn-default btn-sm', 'data-action': 'export',
+          text: t('export')}),
+        createElement('button', {type: 'button', className: 'btn btn-default btn-sm', 'data-action': 'import',
+          text: t('import')}),
+        importFileInput,
         panelCounter,
         status
       ]),
+      importForm,
       createElement('div', {className: 'advanced-bookmarks-toolbar-row'}, [filterInput])
     ]);
     var tree = createElement('div', {className: 'advanced-bookmarks-content'});
@@ -724,6 +761,115 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages
     };
 
     // ------------------------------------------------------------------
+    // Export and import. The file format is defined by the server (BookmarkTransfer): the page only downloads the
+    // exported content and uploads the chosen file.
+    // ------------------------------------------------------------------
+    var getExportFileName = function() {
+      // "xwiki:XWiki.jdoe" gives "jdoe"; characters that some file systems refuse are replaced.
+      var name = user.replace(/^.*[.:]/, '').replace(/[^\w-]+/g, '_');
+      return 'bookmarks-' + name + '-' + new Date().toISOString().slice(0, 10) + '.json';
+    };
+
+    var exportBookmarks = function() {
+      call({operation: 'export'}).then(function(result) {
+        var url = URL.createObjectURL(new Blob([result.content], {type: 'application/json'}));
+        var link = createElement('a', {href: url, download: getExportFileName(), className: 'hidden'});
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        // Revoked later rather than immediately, since some browsers start the download asynchronously.
+        window.setTimeout(function() {
+          URL.revokeObjectURL(url);
+        }, 60000);
+      }).catch(function(error) {
+        notify(t('exportFailed') + ' ' + error.message, 'error');
+      });
+    };
+
+    // The content of the chosen file, uploaded when the user confirms the import.
+    var importContent = null;
+
+    var hideImportForm = function() {
+      importContent = null;
+      importForm.hidden = true;
+      importForm.textContent = '';
+    };
+
+    var setImportFormEnabled = function(enabled) {
+      importForm.querySelectorAll('input, button').forEach(function(element) {
+        element.disabled = !enabled;
+      });
+    };
+
+    var createImportMode = function(name, mode, label, checked) {
+      return createElement('div', {className: 'radio'}, [
+        createElement('label', {}, [
+          createElement('input', {type: 'radio', name: name, value: mode, checked: checked,
+            'data-action': 'importMode'}),
+          ' ' + label
+        ])
+      ]);
+    };
+
+    var showImportForm = function(fileName, content) {
+      var name = uniqueId('advanced-bookmarks-import-mode-');
+      importContent = content;
+      importForm.textContent = '';
+      importForm.appendChild(createElement('p', {text: t('importFile', fileName)}));
+      importForm.appendChild(createImportMode(name, 'merge', t('importMerge'), true));
+      importForm.appendChild(createImportMode(name, 'replace', t('importReplace'), false));
+      importForm.appendChild(createElement('p', {className: 'advanced-bookmarks-import-warning', hidden: true,
+        text: t('importReplaceWarning')}));
+      importForm.appendChild(createElement('div', {className: 'advanced-bookmarks-toolbar-row'}, [
+        createElement('button', {type: 'button', className: 'btn btn-primary btn-sm', 'data-action': 'importConfirm',
+          text: t('importConfirm')}),
+        createElement('button', {type: 'button', className: 'btn btn-default btn-sm', 'data-action': 'importCancel',
+          text: t('cancel')})
+      ]));
+      importForm.hidden = false;
+      importForm.querySelector('input').focus();
+    };
+
+    var readImportFile = function() {
+      var file = importFileInput.files && importFileInput.files[0];
+      // Cleared so that choosing the same file again triggers a new change event.
+      importFileInput.value = '';
+      if (!file) {
+        return;
+      }
+      if (file.size > MAX_FILE_BYTES) {
+        notify(t('importTooLarge'), 'error');
+        return;
+      }
+      file.text().then(function(content) {
+        showImportForm(file.name, content);
+      }, function() {
+        notify(t('importFailed'), 'error');
+      });
+    };
+
+    var runImport = function() {
+      var mode = importForm.querySelector('input[type="radio"]:checked').value;
+      setImportFormEnabled(false);
+      showStatus(t('importing'), 'progress');
+      call({operation: 'import', data: importContent, mode: mode, version: state.version}, true)
+        .then(function(result) {
+          hideImportForm();
+          notify(t('importDone', result.imported, result.skipped));
+          return reload();
+        }, function(error) {
+          setImportFormEnabled(true);
+          if (error.status === CONFLICT) {
+            // The form stays open, so that the file can be imported into the reloaded bookmarks.
+            notify(t('conflict'), 'warning');
+            return reload();
+          }
+          showStatus(t('importFailed') + ' ' + (error.status === BAD_REQUEST ? t('importInvalid') : error.message),
+            'error');
+        });
+    };
+
+    // ------------------------------------------------------------------
     // Clicks and changes
     // ------------------------------------------------------------------
     var getTargetOf = function(element) {
@@ -745,6 +891,12 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages
       retry: function() {
         save();
       },
+      'export': exportBookmarks,
+      'import': function() {
+        importFileInput.click();
+      },
+      importConfirm: runImport,
+      importCancel: hideImportForm,
       toggle: function(target) {
         setCollapsed(target.folderId, !collapsed[folderKey(target.folderId)]);
         render();
@@ -813,7 +965,11 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages
       var element = event.target;
       var action = element.getAttribute('data-action');
       var target = getTargetOf(element);
-      if (action === 'panel' && target.bookmark) {
+      if (action === 'importFile') {
+        readImportFile();
+      } else if (action === 'importMode') {
+        importForm.querySelector('.advanced-bookmarks-import-warning').hidden = element.value !== 'replace';
+      } else if (action === 'panel' && target.bookmark) {
         if (element.checked && countPanelBookmarks() >= panelLimit) {
           element.checked = false;
           notify(t('panelLimitReached', panelLimit), 'warning');
@@ -972,11 +1128,7 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages
     container.appendChild(toolbar);
     container.appendChild(tree);
     showStatus(t('loading'), 'progress');
-    load().then(function() {
-      showStatus('', '');
-    }).catch(function(error) {
-      showStatus(t('loadFailed') + ' ' + error.message, 'error');
-    });
+    reload();
   };
 
   $(function() {

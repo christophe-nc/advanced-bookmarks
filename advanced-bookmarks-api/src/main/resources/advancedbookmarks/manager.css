@@ -81,6 +81,23 @@
 .advanced-bookmarks-status-error {
   color: #c62828;
 }
+/* Import form. No display rule, which would override the hidden attribute. */
+.advanced-bookmarks-import {
+  margin-top: .6em;
+  padding: .6em .8em;
+  border: 1px solid #ccd2d8;
+  border-radius: 4px;
+  background: #f8f9fa;
+}
+.advanced-bookmarks-import p {
+  margin: 0 0 .4em;
+}
+.advanced-bookmarks-import .radio {
+  margin: .2em 0;
+}
+.advanced-bookmarks-import-warning {
+  color: #c62828;
+}
 .advanced-bookmarks-message {
   color: #6c757d;
   font-style: italic;

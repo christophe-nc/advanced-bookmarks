@@ -19,6 +19,9 @@
  */
 package org.xwiki.contrib.advancedbookmarks.internal;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -119,6 +122,38 @@ class BookmarkJsonCodecTest
         assertEquals("{\"folders\":[],\"bookmarks\":[{\"page\":\"wiki:Space.Page\",\"label\":\"Page\","
             + "\"folder\":\"\",\"order\":0,\"panel\":false}]}", json);
         assertEquals("wiki:Space.Page", codec.read(json).getBookmarks().get(0).getPage());
+    }
+
+    @Test
+    void writesAndChecksAHeader() throws BookmarkStoreException
+    {
+        Map<String, Object> header = new LinkedHashMap<>();
+        header.put("format", "test");
+        header.put("formatVersion", 1);
+        BookmarkData data = new BookmarkData();
+
+        String json = codec.write(data, header);
+
+        assertEquals("{\"format\":\"test\",\"formatVersion\":1,\"folders\":[],\"bookmarks\":[]}", json);
+        assertTrue(codec.read(json, header).getBookmarks().isEmpty());
+        assertThrows(BookmarkInvalidDataException.class,
+            () -> codec.read(json, Map.of("format", "test", "formatVersion", 2)));
+        assertThrows(BookmarkInvalidDataException.class, () -> codec.read(json, Map.of("missing", "test")));
+        assertThrows(BookmarkInvalidDataException.class,
+            () -> codec.read("{\"format\":\"test\",\"formatVersion\":\"1\",\"folders\":[],\"bookmarks\":[]}",
+                header));
+    }
+
+    @Test
+    void refusesToWriteOversizedData()
+    {
+        BookmarkEntry bookmark = new BookmarkEntry();
+        bookmark.setPage("wiki:Space.Page");
+        bookmark.setLabel("l".repeat(BookmarkJsonCodec.MAX_JSON_BYTES));
+        BookmarkData data = new BookmarkData();
+        data.setBookmarks(List.of(bookmark));
+
+        assertThrows(BookmarkInvalidDataException.class, () -> codec.write(data));
     }
 
     @Test

@@ -44,6 +44,9 @@
 ##   toggle        page=&lt;reference&gt;                        (POST, form_token)
 ##   getBookmarks  [user=&lt;reference&gt;]
 ##   save          [user=&lt;reference&gt;], data=&lt;JSON&gt;, version  (POST, form_token)
+##   export        [user=&lt;reference&gt;]
+##   import        [user=&lt;reference&gt;], data=&lt;file content&gt;,
+##                 mode=merge|replace, version              (POST, form_token)
 ## Rights, POST and CSRF checks are made by $services.advancedbookmarks: this
 ## page only dispatches the operation and sets the HTTP status.
 ## ---------------------------------------------------------------------------
@@ -60,6 +63,10 @@
   #elseif ($operation == 'save')
     ## The version stays a string: Solr versions exceed the precision of floating-point numbers.
     #set ($result = $services.advancedbookmarks.save("$!request.user", "$!request.data", "$!request.version"))
+  #elseif ($operation == 'export')
+    #set ($result = $services.advancedbookmarks.exportBookmarks("$!request.user"))
+  #elseif ($operation == 'import')
+    #set ($result = $services.advancedbookmarks.importBookmarks("$!request.user", "$!request.data", "$!request.mode", "$!request.version"))
   #else
     #set ($result = {'status': 400, 'error': 'unknownOperation'})
   #end

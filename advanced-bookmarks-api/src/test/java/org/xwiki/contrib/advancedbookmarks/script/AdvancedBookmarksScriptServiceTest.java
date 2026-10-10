@@ -40,6 +40,8 @@ import org.xwiki.contrib.advancedbookmarks.internal.BookmarkPages;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkReferences;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkRequests;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkRights;
+import org.xwiki.contrib.advancedbookmarks.internal.BookmarkTransfer;
+import org.xwiki.contrib.advancedbookmarks.internal.BookmarkViews;
 import org.xwiki.contrib.advancedbookmarks.internal.ReferenceStubs;
 import org.xwiki.model.reference.DocumentReference;
 import org.xwiki.test.annotation.BeforeComponent;
@@ -64,7 +66,7 @@ import static org.mockito.Mockito.when;
  * @version $Id$
  */
 @ComponentTest
-@ComponentList({ BookmarkJsonCodec.class, BookmarkReferences.class })
+@ComponentList({ BookmarkJsonCodec.class, BookmarkReferences.class, BookmarkViews.class })
 class AdvancedBookmarksScriptServiceTest
 {
     private static final DocumentReference ALICE = ReferenceStubs.page("wiki:XWiki.alice");
@@ -98,6 +100,9 @@ class AdvancedBookmarksScriptServiceTest
 
     @MockComponent
     private BookmarkRequests requests;
+
+    @MockComponent
+    private BookmarkTransfer transfer;
 
     @BeforeComponent
     void registerReferences(MockitoComponentManager componentManager) throws Exception
@@ -205,7 +210,9 @@ class AdvancedBookmarksScriptServiceTest
 
         assertEquals(Map.of(STATUS, 405, ERROR, "methodNotAllowed"), this.service.toggle(PAGE_KEY));
         assertEquals(Map.of(STATUS, 405, ERROR, "methodNotAllowed"), this.service.save("", JSON, "0"));
-        verifyNoInteractions(this.bookmarkManager);
+        assertEquals(Map.of(STATUS, 405, ERROR, "methodNotAllowed"),
+            this.service.importBookmarks("", JSON, "merge", "0"));
+        verifyNoInteractions(this.bookmarkManager, this.transfer);
     }
 
     @Test
@@ -215,7 +222,8 @@ class AdvancedBookmarksScriptServiceTest
 
         assertEquals(Map.of(STATUS, 403, ERROR, "invalidToken"), this.service.toggle(PAGE_KEY));
         assertEquals(Map.of(STATUS, 403, ERROR, "invalidToken"), this.service.save("", JSON, "0"));
-        verifyNoInteractions(this.bookmarkManager);
+        assertEquals(Map.of(STATUS, 403, ERROR, "invalidToken"), this.service.importBookmarks("", JSON, "merge", "0"));
+        verifyNoInteractions(this.bookmarkManager, this.transfer);
     }
 
     @Test
@@ -278,6 +286,49 @@ class AdvancedBookmarksScriptServiceTest
 
         assertEquals(Map.of(STATUS, 409, ERROR, "conflict"), result);
         assertFalse(result.containsKey("version"));
+    }
+
+    @Test
+    void exportsTheBookmarksOfAUser() throws Exception
+    {
+        when(this.transfer.export(BOB)).thenReturn(JSON);
+
+        assertEquals(Map.of(STATUS, 200, "content", JSON), this.service.exportBookmarks("bob"));
+    }
+
+    @Test
+    void reportsAnExportDenial() throws Exception
+    {
+        when(this.transfer.export(ALICE)).thenThrow(new BookmarkAccessDeniedException());
+
+        assertEquals(Map.of(STATUS, 403, ERROR, "forbidden"), this.service.exportBookmarks(""));
+    }
+
+    @Test
+    void importsAFileInTheChosenMode() throws Exception
+    {
+        when(this.transfer.importBookmarks(BOB, JSON, true, 3L))
+            .thenReturn(new BookmarkTransfer.ImportResult(4L, 2, 1));
+        when(this.transfer.importBookmarks(ALICE, JSON, false, 0L))
+            .thenReturn(new BookmarkTransfer.ImportResult(1L, 1, 0));
+
+        assertEquals(Map.of(STATUS, 200, "version", "4", "imported", 2, "skipped", 1),
+            this.service.importBookmarks("bob", JSON, "replace", "3"));
+        assertEquals(Map.of(STATUS, 200, "version", "1", "imported", 1, "skipped", 0),
+            this.service.importBookmarks("", JSON, "merge", "0"));
+    }
+
+    @Test
+    void rejectsAnInvalidImportRequest() throws Exception
+    {
+        assertEquals(Map.of(STATUS, 400, ERROR, "invalid"), this.service.importBookmarks("", JSON, "append", "0"));
+        assertEquals(Map.of(STATUS, 400, ERROR, "invalid"), this.service.importBookmarks("", JSON, null, "0"));
+        assertEquals(Map.of(STATUS, 400, ERROR, "invalid"), this.service.importBookmarks("", JSON, "merge", "x"));
+        verifyNoInteractions(this.transfer);
+
+        when(this.transfer.importBookmarks(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(),
+            org.mockito.ArgumentMatchers.anyLong())).thenThrow(new BookmarkStoreConflictException(null));
+        assertEquals(Map.of(STATUS, 409, ERROR, "conflict"), this.service.importBookmarks("", JSON, "merge", "0"));
     }
 
     private static BookmarkData data()

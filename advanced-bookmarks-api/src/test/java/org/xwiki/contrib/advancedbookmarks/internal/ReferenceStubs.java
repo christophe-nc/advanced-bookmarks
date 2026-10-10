@@ -51,8 +51,9 @@ public final class ReferenceStubs
     }
 
     /**
-     * Register a simplified current resolver and default serializer. Plain implementations are used rather than
-     * mocks because tests resolve thousands of references, which is very slow with Mockito.
+     * Register a simplified current resolver, default serializer and local serializer (without the wiki). Plain
+     * implementations are used rather than mocks because tests resolve thousands of references, which is very slow
+     * with Mockito.
      *
      * @param componentManager the component manager of the test
      * @throws Exception if the components cannot be registered
@@ -67,6 +68,11 @@ public final class ReferenceStubs
             new DefaultParameterizedType(null, DocumentReferenceResolver.class, String.class), "current", resolver);
         componentManager.registerComponent(
             new DefaultParameterizedType(null, EntityReferenceSerializer.class, String.class), "default", serializer);
+        EntityReferenceSerializer<String> localSerializer =
+            (reference, parameters) -> serialize(new DocumentReference(reference)).replaceFirst("^[^:]*:", "");
+        componentManager.registerComponent(
+            new DefaultParameterizedType(null, EntityReferenceSerializer.class, String.class), "local",
+            localSerializer);
     }
 
     /**

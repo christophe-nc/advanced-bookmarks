@@ -7,6 +7,8 @@ org.xwiki.contrib.advancedbookmarks.internal.BookmarkRequests
 org.xwiki.contrib.advancedbookmarks.internal.BookmarkRights
 org.xwiki.contrib.advancedbookmarks.internal.BookmarksMacro
 org.xwiki.contrib.advancedbookmarks.internal.BookmarkSolrCoreInitializer
+org.xwiki.contrib.advancedbookmarks.internal.BookmarkTransfer
+org.xwiki.contrib.advancedbookmarks.internal.BookmarkViews
 org.xwiki.contrib.advancedbookmarks.internal.DefaultBookmarkManager
 org.xwiki.contrib.advancedbookmarks.internal.SolrBookmarkStore
 org.xwiki.contrib.advancedbookmarks.script.AdvancedBookmarksScriptService

@@ -22,6 +22,7 @@ package org.xwiki.contrib.advancedbookmarks.internal;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 import javax.inject.Singleton;
@@ -77,7 +78,25 @@ public class BookmarkJsonCodec
      */
     public BookmarkData read(String json) throws BookmarkInvalidDataException
     {
+        return read(json, Map.of());
+    }
+
+    /**
+     * Parse bookmark JSON into typed data, after checking its header. The version of the result is {@code 0}.
+     *
+     * @param json the JSON, with the {@code folders} and {@code bookmarks} root properties
+     * @param requiredHeader the root properties the JSON must have, with these exact values
+     * @return the parsed data, which may still need normalization
+     * @throws BookmarkInvalidDataException if the JSON is malformed, exceeds the limits or lacks the header
+     */
+    public BookmarkData read(String json, Map<String, Object> requiredHeader) throws BookmarkInvalidDataException
+    {
         ObjectNode root = parse(json);
+        for (Map.Entry<String, Object> property : requiredHeader.entrySet()) {
+            if (!JSON.valueToTree(property.getValue()).equals(root.get(property.getKey()))) {
+                throw new BookmarkInvalidDataException(null);
+            }
+        }
         try {
             BookmarkData data = new BookmarkData();
             data.setFolders(Arrays.asList(JSON.treeToValue(root.get(FOLDERS), BookmarkFolder[].class)));
@@ -93,13 +112,33 @@ public class BookmarkJsonCodec
      *
      * @param data the data to serialize
      * @return the JSON
+     * @throws BookmarkInvalidDataException if the JSON exceeds {@link #MAX_JSON_BYTES}
      */
-    public String write(BookmarkData data)
+    public String write(BookmarkData data) throws BookmarkInvalidDataException
+    {
+        return write(data, Map.of());
+    }
+
+    /**
+     * Serialize the folders and bookmarks of the given data after a header. The version is not serialized.
+     *
+     * @param data the data to serialize
+     * @param header root properties written before the folders and bookmarks
+     * @return the JSON
+     * @throws BookmarkInvalidDataException if the JSON exceeds {@link #MAX_JSON_BYTES}
+     */
+    public String write(BookmarkData data, Map<String, Object> header) throws BookmarkInvalidDataException
     {
         ObjectNode root = JSON.createObjectNode();
+        header.forEach((name, value) -> root.set(name, JSON.valueToTree(value)));
         root.set(FOLDERS, JSON.valueToTree(data.getFolders()));
         root.set(BOOKMARKS, JSON.valueToTree(data.getBookmarks()));
-        return serialize(root);
+        String json = serialize(root);
+        // Checked on writing too, since JSON that reading would reject could never be read back.
+        if (isTooLarge(json)) {
+            throw new BookmarkInvalidDataException(null);
+        }
+        return json;
     }
 
     /**
@@ -162,7 +201,7 @@ public class BookmarkJsonCodec
 
     private static ObjectNode parse(String json) throws BookmarkInvalidDataException
     {
-        if (json == null || json.isBlank() || json.getBytes(StandardCharsets.UTF_8).length > MAX_JSON_BYTES) {
+        if (json == null || json.isBlank() || isTooLarge(json)) {
             throw new BookmarkInvalidDataException(null);
         }
         JsonNode root;
@@ -176,6 +215,11 @@ public class BookmarkJsonCodec
             throw new BookmarkInvalidDataException(null);
         }
         return (ObjectNode) root;
+    }
+
+    private static boolean isTooLarge(String json)
+    {
+        return json.getBytes(StandardCharsets.UTF_8).length > MAX_JSON_BYTES;
     }
 
     private static boolean isBoundedArray(JsonNode node)
