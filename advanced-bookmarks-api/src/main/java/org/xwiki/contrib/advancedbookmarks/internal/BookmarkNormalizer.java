@@ -36,7 +36,6 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkData;
 import org.xwiki.contrib.advancedbookmarks.BookmarkEntry;
 import org.xwiki.contrib.advancedbookmarks.BookmarkFolder;
 import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
-import org.xwiki.contrib.advancedbookmarks.BookmarkManager;
 import org.xwiki.model.reference.DocumentReference;
 import org.xwiki.model.reference.DocumentReferenceResolver;
 import org.xwiki.model.reference.EntityReferenceSerializer;
@@ -69,6 +68,9 @@ public class BookmarkNormalizer
 
     @Inject
     private EntityReferenceSerializer<String> serializer;
+
+    @Inject
+    private BookmarkConfiguration configuration;
 
     /**
      * Normalize bookmark data in place.
@@ -158,6 +160,8 @@ public class BookmarkNormalizer
         Set<String> pages = new HashSet<>();
         List<BookmarkEntry> validBookmarks = new ArrayList<>();
         int panelCount = 0;
+        // Also applied on every read: lowering the limit shortens the panel at once, and the next save makes it final.
+        int panelLimit = this.configuration.getPanelLimit();
         for (BookmarkEntry bookmark : data.getBookmarks()) {
             String page = normalizePage(bookmark, wiki);
             if (page != null && pages.add(page)) {
@@ -166,7 +170,7 @@ public class BookmarkNormalizer
                 if (bookmark.getFolder() == null || !folderIds.contains(bookmark.getFolder())) {
                     bookmark.setFolder(BookmarkFolder.ROOT);
                 }
-                bookmark.setPanel(bookmark.isPanel() && panelCount < BookmarkManager.MAX_PANEL_SIZE);
+                bookmark.setPanel(bookmark.isPanel() && panelCount < panelLimit);
                 if (bookmark.isPanel()) {
                     panelCount++;
                 }

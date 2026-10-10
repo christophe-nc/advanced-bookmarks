@@ -23,12 +23,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.xwiki.contrib.advancedbookmarks.BookmarkData;
 import org.xwiki.contrib.advancedbookmarks.BookmarkEntry;
 import org.xwiki.contrib.advancedbookmarks.BookmarkFolder;
 import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
-import org.xwiki.contrib.advancedbookmarks.BookmarkManager;
 import org.xwiki.test.annotation.BeforeComponent;
 import org.xwiki.test.junit5.mockito.ComponentTest;
 import org.xwiki.test.junit5.mockito.InjectMockComponents;
@@ -38,6 +38,7 @@ import org.xwiki.test.mockito.MockitoComponentManager;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.when;
 
 /**
  * Tests the normalization of the bookmark data received from the browser.
@@ -49,13 +50,25 @@ class BookmarkNormalizerTest
 {
     private static final String WIKI = ReferenceStubs.WIKI;
 
+    /** A limit other than the default one, to check that the configured limit is applied. */
+    private static final int PANEL_LIMIT = 3;
+
     @InjectMockComponents
     private BookmarkNormalizer normalizer;
+
+    @MockComponent
+    private BookmarkConfiguration configuration;
 
     @BeforeComponent
     void registerReferences(MockitoComponentManager componentManager) throws Exception
     {
         ReferenceStubs.register(componentManager);
+    }
+
+    @BeforeEach
+    void setUp()
+    {
+        when(this.configuration.getPanelLimit()).thenReturn(BookmarkConfiguration.DEFAULT_PANEL_LIMIT);
     }
 
     @Test
@@ -132,10 +145,11 @@ class BookmarkNormalizerTest
     }
 
     @Test
-    void limitsThePanelSelection() throws Exception
+    void limitsThePanelSelectionToTheConfiguredLimit() throws Exception
     {
+        when(this.configuration.getPanelLimit()).thenReturn(PANEL_LIMIT);
         List<BookmarkEntry> bookmarks = new ArrayList<>();
-        for (int i = 0; i < BookmarkManager.MAX_PANEL_SIZE + 2; i++) {
+        for (int i = 0; i < PANEL_LIMIT + 2; i++) {
             BookmarkEntry bookmark = bookmark("Space.Page" + i, "");
             bookmark.setPanel(true);
             bookmarks.add(bookmark);
@@ -144,9 +158,8 @@ class BookmarkNormalizerTest
 
         this.normalizer.normalize(data, WIKI);
 
-        assertEquals(BookmarkManager.MAX_PANEL_SIZE, data.getBookmarks().stream().filter(BookmarkEntry::isPanel)
-            .count());
-        assertFalse(data.getBookmarks().get(BookmarkManager.MAX_PANEL_SIZE).isPanel());
+        assertEquals(PANEL_LIMIT, data.getBookmarks().stream().filter(BookmarkEntry::isPanel).count());
+        assertFalse(data.getBookmarks().get(PANEL_LIMIT).isPanel());
     }
 
     @Test

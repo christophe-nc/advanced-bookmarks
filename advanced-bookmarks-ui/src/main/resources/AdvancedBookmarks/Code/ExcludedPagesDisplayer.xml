@@ -1,0 +1,110 @@
+<?xml version="1.1" encoding="UTF-8"?>
+
+<!--
+ * See the NOTICE file distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2.1 of
+ * the License, or (at your option) any later version.
+ *
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this software; if not, write to the Free
+ * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
+-->
+
+<xwikidoc version="1.5" reference="AdvancedBookmarks.Code.ExcludedPagesDisplayer" locale="">
+  <web>AdvancedBookmarks.Code</web>
+  <name>ExcludedPagesDisplayer</name>
+  <language/>
+  <defaultLanguage/>
+  <translation>0</translation>
+  <creator>xwiki:XWiki.Admin</creator>
+  <parent>AdvancedBookmarks.WebHome</parent>
+  <author>xwiki:XWiki.Admin</author>
+  <contentAuthor>xwiki:XWiki.Admin</contentAuthor>
+  <version>1.1</version>
+  <title>Advanced Bookmarks excluded pages displayer</title>
+  <comment/>
+  <minorEdit>false</minorEdit>
+  <syntaxId>xwiki/2.1</syntaxId>
+  <hidden>true</hidden>
+  <content>{{velocity}}
+{{html clean="false"}}
+## ---------------------------------------------------------------------------
+## Custom display of the excludedPages property of AdvancedBookmarks.Code.ConfigurationClass. In edit mode, pages are
+## chosen in the document tree of XWiki (advancedbookmarks/configuration.js) rather than typed, so they cannot be
+## mistyped. Each page is submitted as a hidden field; the server validates the references again.
+## ---------------------------------------------------------------------------
+#set ($escapedName = $escapetool.xml("$!{prefix}$!{name}"))
+#set ($values = [])
+#if ($value.iterator())
+  #set ($discard = $values.addAll($value))
+#elseif ("$!value" != '')
+  #set ($discard = $values.add($value))
+#end
+## Like on the server, a relative reference is relative to the configuration page.
+#set ($configurationReference = $services.model.createDocumentReference($xcontext.database, ['AdvancedBookmarks', 'Code'], 'Configuration'))
+#set ($items = [])
+#foreach ($stored in $values)
+  #set ($reference = "$!stored")
+  #set ($reference = $reference.trim())
+  #if ($reference != '')
+    #set ($pageReference = $services.model.resolveDocument($reference, 'current', $configurationReference))
+    ## The title is only displayed to administrators who can view the page.
+    #set ($title = '')
+    #if ($services.security.authorization.hasAccess('view', $pageReference) &amp;&amp; $xwiki.exists($pageReference))
+      #set ($title = $xwiki.getDocument($pageReference).plainTitle)
+    #end
+    #set ($discard = $items.add({'reference': $reference, 'title': $title}))
+  #end
+#end
+#set ($noneLabel = $services.localization.render('advancedbookmarks.admin.excludedPages.none'))
+#if ($type == 'edit')
+  #set ($discard = $xwiki.jsrx.use('advancedbookmarks/configuration.js'))
+  #template('locationPicker_macros.vm')
+  &lt;div class="advanced-bookmarks-excluded-pages" data-name="$escapedName"&gt;
+    ## Always submitted, so that removing the last page is saved too.
+    &lt;input type="hidden" name="$escapedName" value="" /&gt;
+    &lt;ul class="list-unstyled advanced-bookmarks-excluded-list"&gt;
+    #foreach ($item in $items)
+      &lt;li class="advanced-bookmarks-excluded-page"&gt;&lt;input type="hidden" name="$escapedName" value="$escapetool.xml($item.reference)" /&gt;&lt;span class="advanced-bookmarks-excluded-title"&gt;$escapetool.xml($item.title)&lt;/span&gt; &lt;span class="text-muted"&gt;$escapetool.xml($item.reference)&lt;/span&gt; &lt;button type="button" class="btn btn-default btn-xs advanced-bookmarks-excluded-remove"&gt;$escapetool.xml($services.localization.render('advancedbookmarks.admin.excludedPages.remove'))&lt;/button&gt;&lt;/li&gt;
+    #end
+    &lt;/ul&gt;
+    &lt;p class="text-muted advanced-bookmarks-excluded-empty"#if (!$items.isEmpty()) hidden#end&gt;$escapetool.xml($noneLabel)&lt;/p&gt;
+    &lt;button type="button" class="btn btn-default advanced-bookmarks-excluded-add"&gt;$escapetool.xml($services.localization.render('advancedbookmarks.admin.excludedPages.add'))&lt;/button&gt;
+    #documentPickerModal({'showTerminalDocuments': true})
+  &lt;/div&gt;
+#elseif ($type == 'view' || $type == 'rendered')
+  #if ($items.isEmpty())
+    &lt;span class="text-muted"&gt;$escapetool.xml($noneLabel)&lt;/span&gt;
+  #else
+    &lt;ul class="list-unstyled"&gt;
+    #foreach ($item in $items)
+      &lt;li&gt;$escapetool.xml($item.title) &lt;span class="text-muted"&gt;$escapetool.xml($item.reference)&lt;/span&gt;&lt;/li&gt;
+    #end
+    &lt;/ul&gt;
+  #end
+#elseif ($type == 'hidden')
+  &lt;input type="hidden" name="$escapedName" value="" /&gt;
+  #foreach ($item in $items)
+    &lt;input type="hidden" name="$escapedName" value="$escapetool.xml($item.reference)" /&gt;
+  #end
+#else
+  ## A custom display is only used when its result is not empty, whatever the display mode.
+  #if ($items.isEmpty())
+    $escapetool.xml($noneLabel)
+  #else
+    #foreach ($item in $items)$escapetool.xml($item.reference)#if ($foreach.hasNext), #end#end
+  #end
+#end
+{{/html}}
+{{/velocity}}</content>
+</xwikidoc>

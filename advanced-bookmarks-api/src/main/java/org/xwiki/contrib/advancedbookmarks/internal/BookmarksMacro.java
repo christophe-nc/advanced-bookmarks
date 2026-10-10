@@ -31,7 +31,6 @@ import javax.inject.Singleton;
 import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
-import org.xwiki.contrib.advancedbookmarks.BookmarkManager;
 import org.xwiki.localization.ContextualLocalizationManager;
 import org.xwiki.model.reference.DocumentReference;
 import org.xwiki.model.reference.EntityReferenceSerializer;
@@ -85,6 +84,9 @@ public class BookmarksMacro extends AbstractNoParameterMacro
 
     @Inject
     private BookmarkPages pages;
+
+    @Inject
+    private BookmarkConfiguration configuration;
 
     @Inject
     private EntityReferenceSerializer<String> serializer;
@@ -148,7 +150,7 @@ public class BookmarksMacro extends AbstractNoParameterMacro
         Map<String, String> attributes = new LinkedHashMap<>();
         attributes.put(CLASS, CONTAINER_CLASS);
         attributes.put("data-user", this.serializer.serialize(owner));
-        attributes.put("data-panel-limit", String.valueOf(BookmarkManager.MAX_PANEL_SIZE));
+        attributes.put("data-panel-limit", String.valueOf(this.configuration.getPanelLimit()));
         if (this.rights.isAdmin()) {
             this.jsfx.use(USER_PICKER);
             attributes.put("data-admin", "true");

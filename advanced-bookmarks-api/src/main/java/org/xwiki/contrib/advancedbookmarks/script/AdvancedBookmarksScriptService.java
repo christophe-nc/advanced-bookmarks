@@ -34,6 +34,7 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkManager;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreConflictException;
+import org.xwiki.contrib.advancedbookmarks.internal.BookmarkConfiguration;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkJsonCodec;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkReferences;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkRequests;
@@ -99,6 +100,9 @@ public class AdvancedBookmarksScriptService implements ScriptService
     private BookmarkTransfer transfer;
 
     @Inject
+    private BookmarkConfiguration configuration;
+
+    @Inject
     private BookmarkViews views;
 
     @Inject
@@ -153,12 +157,26 @@ public class AdvancedBookmarksScriptService implements ScriptService
 
     /**
      * @param page the serialized reference of a page of the current wiki
-     * @return whether the page is bookmarked by the current user, under the {@code bookmarked} key
+     * @return whether the page is bookmarked by the current user, under the {@code bookmarked} key, and whether it may
+     *         be added to the bookmarks, under the {@code bookmarkable} key ({@code false} for an excluded page)
      */
     public Map<String, Object> isBookmarked(String page)
     {
-        return execute(() -> bookmarked(
-            this.bookmarkManager.isBookmarked(this.rights.getCurrentUser(), this.references.resolvePage(page))));
+        return execute(() -> {
+            DocumentReference pageReference = this.references.resolvePage(page);
+            Map<String, Object> result =
+                bookmarked(this.bookmarkManager.isBookmarked(this.rights.getCurrentUser(), pageReference));
+            result.put("bookmarkable", !this.configuration.isExcluded(pageReference));
+            return result;
+        });
+    }
+
+    /**
+     * @return {@code true} if the current wiki displays the star in the action bar of the pages
+     */
+    public boolean isStarEnabled()
+    {
+        return this.configuration.isStarEnabled();
     }
 
     /**

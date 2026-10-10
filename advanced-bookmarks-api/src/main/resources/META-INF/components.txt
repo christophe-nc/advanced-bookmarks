@@ -1,3 +1,5 @@
+org.xwiki.contrib.advancedbookmarks.internal.BookmarkConfiguration
+org.xwiki.contrib.advancedbookmarks.internal.BookmarkConfigurationSource
 org.xwiki.contrib.advancedbookmarks.internal.BookmarkEventListener
 org.xwiki.contrib.advancedbookmarks.internal.BookmarkJsonCodec
 org.xwiki.contrib.advancedbookmarks.internal.BookmarkNormalizer

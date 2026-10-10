@@ -34,9 +34,6 @@ import org.xwiki.model.reference.DocumentReference;
 @Role
 public interface BookmarkManager
 {
-    /** Maximum number of bookmarks displayed in the panel. */
-    int MAX_PANEL_SIZE = 10;
-
     /**
      * @param user the owner of the bookmarks
      * @return {@code true} if the current user may read and modify the bookmarks of {@code user}
@@ -96,8 +93,8 @@ public interface BookmarkManager
 
     /**
      * @param data normalized bookmarks
-     * @return the bookmarks selected for the panel in display order or, if none is selected, the first
-     *         {@value #MAX_PANEL_SIZE} bookmarks in display order
+     * @return the bookmarks selected for the panel in display order or, if none is selected, the first bookmarks in
+     *         display order, up to the panel limit configured for the current wiki
      */
     List<BookmarkEntry> getPanel(BookmarkData data);
 }

@@ -101,6 +101,9 @@ class BookmarksMacroTest
     private BookmarkPages pages;
 
     @MockComponent
+    private BookmarkConfiguration configuration;
+
+    @MockComponent
     private ContextualLocalizationManager localization;
 
     @MockComponent
@@ -136,6 +139,8 @@ class BookmarksMacroTest
         when(this.rights.getCurrentWiki()).thenReturn(WIKI);
         when(this.references.resolveUser(null)).thenReturn(ALICE);
         when(this.rights.canManage(ALICE)).thenReturn(true);
+        // Not the default limit, to check that the configured one is passed to the script.
+        when(this.configuration.getPanelLimit()).thenReturn(15);
     }
 
     @Test
@@ -156,7 +161,7 @@ class BookmarksMacroTest
         List<Block> blocks = execute();
 
         assertEquals(1, blocks.size());
-        assertEquals(Map.of(CLASS, CONTAINER, USER, "wiki:XWiki.alice", PANEL_LIMIT, "10"),
+        assertEquals(Map.of(CLASS, CONTAINER, USER, "wiki:XWiki.alice", PANEL_LIMIT, "15"),
             blocks.get(0).getParameters());
         assertEquals(List.of("advancedbookmarks.manager.loading[]"), words(blocks.get(0)));
         verify(this.jsrx).use("advancedbookmarks/manager.js");
@@ -178,7 +183,7 @@ class BookmarksMacroTest
 
         assertEquals(2, blocks.size());
         assertMessage(blocks.get(0), "box infomessage", "advancedbookmarks.manager.otherUser[Bob <Doe>]");
-        assertEquals(Map.of(CLASS, CONTAINER, USER, "wiki:XWiki.bob", PANEL_LIMIT, "10", ADMIN, "true",
+        assertEquals(Map.of(CLASS, CONTAINER, USER, "wiki:XWiki.bob", PANEL_LIMIT, "15", ADMIN, "true",
             "data-user-scope", "LOCAL_AND_GLOBAL"), blocks.get(1).getParameters());
         verify(this.jsfx).use("uicomponents/suggest/suggestUsersAndGroups.js");
     }
@@ -191,7 +196,7 @@ class BookmarksMacroTest
 
         List<Block> blocks = execute();
 
-        assertEquals(Map.of(CLASS, CONTAINER, USER, "wiki:XWiki.alice", PANEL_LIMIT, "10", ADMIN, "true"),
+        assertEquals(Map.of(CLASS, CONTAINER, USER, "wiki:XWiki.alice", PANEL_LIMIT, "15", ADMIN, "true"),
             blocks.get(0).getParameters());
         assertEquals("Unable to read the user scope of the wiki: failure", this.logCapture.getMessage(0));
     }

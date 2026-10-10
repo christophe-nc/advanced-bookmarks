@@ -46,7 +46,6 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkData;
 import org.xwiki.contrib.advancedbookmarks.BookmarkEntry;
 import org.xwiki.contrib.advancedbookmarks.BookmarkException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkFolder;
-import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkManager;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreConflictException;
 import org.xwiki.model.reference.DocumentReference;
@@ -90,6 +89,9 @@ public class BookmarkTransfer
     private BookmarkRights rights;
 
     @Inject
+    private BookmarkConfiguration configuration;
+
+    @Inject
     @Named("current")
     private DocumentReferenceResolver<String> resolver;
 
@@ -102,8 +104,8 @@ public class BookmarkTransfer
      *
      * @param version the new storage version of the bookmarks
      * @param imported the number of bookmarks added by the import
-     * @param skipped the number of bookmarks of the file that were not added: already bookmarked, invalid or of
-     *            another wiki
+     * @param skipped the number of bookmarks of the file that were not added: already bookmarked, invalid, of
+     *            another wiki or of an excluded page
      */
     public record ImportResult(long version, int imported, int skipped)
     {
@@ -150,6 +152,12 @@ public class BookmarkTransfer
             throw new BookmarkStoreConflictException(null);
         }
         int fileCount = imported.getBookmarks().size();
+        // Normalized first, so that pages are compared under their canonical reference in the current wiki, and so
+        // that the imported folders form a valid tree.
+        this.normalizer.normalize(imported, this.rights.getCurrentWiki());
+        // Like the star, an import may not add excluded pages; they are counted as skipped.
+        imported.getBookmarks()
+            .removeIf(bookmark -> this.configuration.isExcluded(this.resolver.resolve(bookmark.getPage())));
         int keptCount = 0;
         BookmarkData result = imported;
         if (!replace) {
@@ -168,11 +176,8 @@ public class BookmarkTransfer
      * Add the imported folders and new bookmarks to the existing ones. The existing bookmarks come first, so that the
      * normalization keeps their panel selection first.
      */
-    private void merge(BookmarkData current, BookmarkData imported) throws BookmarkInvalidDataException
+    private static void merge(BookmarkData current, BookmarkData imported)
     {
-        // Normalized first, so that pages are compared under their canonical reference in the current wiki, and so
-        // that the imported folders form a valid tree.
-        this.normalizer.normalize(imported, this.rights.getCurrentWiki());
         Map<String, String> newIds = mergeFolders(current, imported);
 
         Set<String> pages = current.getBookmarks().stream().map(BookmarkEntry::getPage).collect(Collectors.toSet());

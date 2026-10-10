@@ -14,18 +14,30 @@ Upgrading the extension replaces a farm-level JAR, after which XWiki reloads the
 
 ## Usage
 
-- **Star**: a star button is added to the action bar of every page (next to *Edit* and *Create*), for logged-in users. It adds the page to the uncategorized bookmarks, or removes it. It is not displayed on the pages of the extension itself.
-- **Panel**: the *Bookmarks* panel (`Panels.MyBookmarks`) lists the bookmarks selected for the panel, or the first ten, with a link to the management page. It is not added to the page layout automatically: add it in *Administration > Look & Feel > Panels*. Deleted pages are struck through; pages the user cannot view are shown without link.
-- **Management page**: `AdvancedBookmarks.WebHome` displays the `{{bookmarks/}}` macro, which can also be used in any other page. Users organize their bookmarks in folders and subfolders, by drag and drop or with the keyboard (arrow buttons and *Move to* lists), rename them, select up to ten bookmarks for the panel and filter the list. Changes are saved automatically; if the bookmarks were modified meanwhile (another tab, the star), they are reloaded.
-- **Export and import**: the *Export* button of the management page downloads the bookmarks as a JSON file. *Import…* reads such a file (1 MB at most) and, after confirmation, either adds it to the current bookmarks or replaces them. When adding, an imported folder is merged with the folder of the same name (ignoring case) at the same place, other folders are created, imported items come after the existing ones of their folder, and pages already bookmarked are skipped: importing an export of the same bookmarks changes nothing. Page references are exported without their wiki, so a file can be imported into another wiki or farm; pages of another wiki found in a file are skipped.
+- **Star**: a star button is added to the action bar of every page (next to *Edit* and *Create*), for logged-in users. It adds the page to the uncategorized bookmarks, or removes it. It is not displayed on excluded pages (see [Configuration](#configuration)), nor on the pages of the extension itself.
+- **Panel**: the *Bookmarks* panel (`Panels.MyBookmarks`) lists the bookmarks selected for the panel, or the first ones, up to the configured panel size (ten by default), with a link to the management page. It is not added to the page layout automatically: add it in *Administration > Look & Feel > Panels*. Deleted pages are struck through; pages the user cannot view are shown without link.
+- **Management page**: `AdvancedBookmarks.WebHome` displays the `{{bookmarks/}}` macro, which can also be used in any other page. Users organize their bookmarks in folders and subfolders, by drag and drop or with the keyboard (arrow buttons and *Move to* lists), rename them, select bookmarks for the panel (up to the configured panel size) and filter the list. Changes are saved automatically; if the bookmarks were modified meanwhile (another tab, the star), they are reloaded.
+- **Export and import**: the *Export* button of the management page downloads the bookmarks as a JSON file. *Import…* reads such a file (1 MB at most) and, after confirmation, either adds it to the current bookmarks or replaces them. When adding, an imported folder is merged with the folder of the same name (ignoring case) at the same place, other folders are created, imported items come after the existing ones of their folder, and pages already bookmarked are skipped: importing an export of the same bookmarks changes nothing. Page references are exported without their wiki, so a file can be imported into another wiki or farm; pages of another wiki and excluded pages found in a file are skipped.
 - **Administrators** get a user picker on the management page: the chosen user's bookmarks open in a new tab (`AdvancedBookmarks.WebHome?user=XWiki.jdoe`), with a banner recalling whose bookmarks are displayed. The server checks the administration right on every request.
+
+## Configuration
+
+Each wiki has its own settings, in *Administration > Other > Advanced Bookmarks* (stored in the page `AdvancedBookmarks.Code.Configuration` of the wiki). A wiki that has not been configured uses the defaults.
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| Panel size | 10 | Maximum number of bookmarks displayed in the panel, from 1 to 20. An invalid value is replaced by the default, with a warning in the logs. When it is lowered, the panels are shortened at once, and the extra selections are removed the next time each user saves their bookmarks. |
+| Display the star | Yes | Displays the star in the action bar of the pages. When it is hidden, bookmarks can only be added by importing a file. |
+| Excluded pages | None | Pages that may not be added to the bookmarks, with the star or by an import (at most 100). Selecting the home page of a space, such as `Main.Archives.WebHome`, also excludes all its child pages. Existing bookmarks of these pages are kept and can still be removed. |
+
+The pages of the extension itself (the `AdvancedBookmarks` space and `Panels.MyBookmarks`) are always excluded.
 
 ## Modules
 
 | Module | Packaging | Content |
 | --- | --- | --- |
 | `advanced-bookmarks-api` | JAR | Storage, business logic, rights, script service, `{{bookmarks/}}` macro with its JavaScript and CSS, and translations. |
-| `advanced-bookmarks-ui` | XAR | Wiki pages: JSON service, star, panel and management page. |
+| `advanced-bookmarks-ui` | XAR | Wiki pages: JSON service, star, panel, management page and configuration. |
 
 ## Access rules
 
@@ -46,9 +58,10 @@ The extension does not require programming rights.
 | Method | Description |
 | --- | --- |
 | `getBookmarks(user)` | Folders and bookmarks of a user (empty for the current user), in display order, with their `version`. |
-| `getPanel()` | Bookmarks of the current user selected for the panel, or the first ten. |
-| `isBookmarked(page)` | Whether the current user bookmarked a page. |
-| `toggle(page)` | Add the page to the uncategorized bookmarks of the current user, or remove it. Write operation. |
+| `getPanel()` | Bookmarks of the current user selected for the panel, or the first ones, up to the configured panel size. |
+| `isBookmarked(page)` | Whether the current user bookmarked a page (`bookmarked`), and whether the page may be bookmarked (`bookmarkable`, `false` for an excluded page). |
+| `isStarEnabled()` | Whether the current wiki displays the star (a plain boolean). |
+| `toggle(page)` | Add the page to the uncategorized bookmarks of the current user, or remove it. Adding an excluded page is refused (`forbidden`). Write operation. |
 | `save(user, json, version)` | Replace all the bookmarks of a user, provided they were not modified since `version` was read; `conflict` otherwise. Write operation. |
 | `exportBookmarks(user)` | Export file of the bookmarks of a user, as a JSON string under the `content` key. |
 | `importBookmarks(user, json, mode, version)` | Import an export file in the `merge` or `replace` mode, provided the bookmarks were not modified since `version` was read. Returns the new `version` and the number of bookmarks `imported` and `skipped`. Write operation. |

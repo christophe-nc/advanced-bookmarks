@@ -31,7 +31,6 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkData;
 import org.xwiki.contrib.advancedbookmarks.BookmarkEntry;
 import org.xwiki.contrib.advancedbookmarks.BookmarkFolder;
 import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
-import org.xwiki.contrib.advancedbookmarks.BookmarkManager;
 import org.xwiki.contrib.advancedbookmarks.BookmarkRecord;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStore;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreConflictException;
@@ -79,6 +78,9 @@ class DefaultBookmarkManagerTest
 
     private static final String PAGE_KEY = "wiki:Space.Page";
 
+    /** A limit other than the default one, to check that the configured limit is applied. */
+    private static final int PANEL_LIMIT = 4;
+
     private static final String EMPTY_JSON = "{\"folders\":[],\"bookmarks\":[]}";
 
     private static final String PAGE_JSON =
@@ -96,6 +98,9 @@ class DefaultBookmarkManagerTest
     @MockComponent
     private BookmarkPages pages;
 
+    @MockComponent
+    private BookmarkConfiguration configuration;
+
     private final BookmarkJsonCodec codec = new BookmarkJsonCodec();
 
     @BeforeComponent
@@ -112,6 +117,7 @@ class DefaultBookmarkManagerTest
         when(this.rights.canView(any())).thenReturn(true);
         when(this.pages.exists(any())).thenReturn(true);
         when(this.pages.getPlainTitle(PAGE)).thenReturn("Page title");
+        when(this.configuration.getPanelLimit()).thenReturn(BookmarkConfiguration.DEFAULT_PANEL_LIMIT);
     }
 
     @Test
@@ -205,6 +211,28 @@ class DefaultBookmarkManagerTest
     void removesAnExistingBookmark() throws Exception
     {
         stored(PAGE_JSON, 3L);
+
+        assertFalse(this.manager.toggle(USER, PAGE));
+
+        assertTrue(savedData().getBookmarks().isEmpty());
+    }
+
+    @Test
+    void refusesToBookmarkAnExcludedPage() throws Exception
+    {
+        stored(EMPTY_JSON, 3L);
+        when(this.configuration.isExcluded(PAGE)).thenReturn(true);
+
+        assertThrows(BookmarkAccessDeniedException.class, () -> this.manager.toggle(USER, PAGE));
+
+        verify(this.store, never()).save(anyString(), anyString(), anyString(), anyLong());
+    }
+
+    @Test
+    void stillRemovesTheBookmarkOfAnExcludedPage() throws Exception
+    {
+        stored(PAGE_JSON, 3L);
+        when(this.configuration.isExcluded(PAGE)).thenReturn(true);
 
         assertFalse(this.manager.toggle(USER, PAGE));
 
@@ -311,14 +339,15 @@ class DefaultBookmarkManagerTest
     @Test
     void showsTheSelectedPanelBookmarksOrTheFirstOnes()
     {
+        when(this.configuration.getPanelLimit()).thenReturn(PANEL_LIMIT);
         List<BookmarkEntry> bookmarks = new ArrayList<>();
-        for (int i = 0; i < BookmarkManager.MAX_PANEL_SIZE + 5; i++) {
+        for (int i = 0; i < 15; i++) {
             bookmarks.add(in("", i));
         }
         BookmarkData data = new BookmarkData();
         data.setBookmarks(bookmarks);
 
-        assertEquals(BookmarkManager.MAX_PANEL_SIZE, this.manager.getPanel(data).size());
+        assertEquals(PANEL_LIMIT, this.manager.getPanel(data).size());
         assertEquals("/0", this.manager.getPanel(data).get(0).getLabel());
 
         data.getBookmarks().get(12).setPanel(true);

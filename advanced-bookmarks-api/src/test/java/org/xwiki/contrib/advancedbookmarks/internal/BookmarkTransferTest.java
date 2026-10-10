@@ -49,6 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -76,6 +77,9 @@ class BookmarkTransferTest
     @MockComponent
     private BookmarkRights rights;
 
+    @MockComponent
+    private BookmarkConfiguration configuration;
+
     private BookmarkJsonCodec jsonCodec;
 
     @BeforeComponent
@@ -90,6 +94,7 @@ class BookmarkTransferTest
         this.jsonCodec = componentManager.getInstance(BookmarkJsonCodec.class);
         BookmarkNormalizer normalizer = componentManager.getInstance(BookmarkNormalizer.class);
         when(this.rights.getCurrentWiki()).thenReturn(ReferenceStubs.WIKI);
+        when(this.configuration.getPanelLimit()).thenReturn(BookmarkConfiguration.DEFAULT_PANEL_LIMIT);
         // Like the real manager, the save normalizes the data in place.
         when(this.bookmarkManager.save(eq(USER), any())).thenAnswer(invocation -> {
             normalizer.normalize(invocation.getArgument(1), ReferenceStubs.WIKI);
@@ -127,6 +132,26 @@ class BookmarkTransferTest
         BookmarkData saved = captureSaved();
         assertEquals(5L, saved.getVersion());
         assertEquals(List.of("wiki:Space.New"), saved.getBookmarks().stream().map(BookmarkEntry::getPage).toList());
+    }
+
+    @Test
+    void skipsExcludedPagesInBothModes() throws Exception
+    {
+        when(this.configuration.isExcluded(ReferenceStubs.page("wiki:Archives.Page"))).thenReturn(true);
+        String json = file(data(0L, List.of(), List.of(bookmark("Archives.Page", "", 0, false),
+            bookmark("Space.New", "", 1, false))));
+
+        for (boolean replace : List.of(true, false)) {
+            when(this.bookmarkManager.getBookmarks(USER)).thenReturn(data(5L, List.of(), List.of()));
+
+            assertEquals(new BookmarkTransfer.ImportResult(8L, 1, 1),
+                this.transfer.importBookmarks(USER, json, replace, 5L));
+        }
+        ArgumentCaptor<BookmarkData> saved = ArgumentCaptor.forClass(BookmarkData.class);
+        verify(this.bookmarkManager, times(2)).save(eq(USER), saved.capture());
+        for (BookmarkData data : saved.getAllValues()) {
+            assertEquals(List.of("wiki:Space.New"), data.getBookmarks().stream().map(BookmarkEntry::getPage).toList());
+        }
     }
 
     @Test
@@ -185,7 +210,7 @@ class BookmarkTransferTest
     void keepsTheExistingPanelSelectionFirst() throws Exception
     {
         List<BookmarkEntry> existing = new ArrayList<>();
-        for (int i = 0; i < BookmarkManager.MAX_PANEL_SIZE; i++) {
+        for (int i = 0; i < BookmarkConfiguration.DEFAULT_PANEL_LIMIT; i++) {
             existing.add(bookmark("wiki:Space.Page" + i, "", i, true));
         }
         when(this.bookmarkManager.getBookmarks(USER)).thenReturn(data(5L, List.of(), existing));
@@ -194,8 +219,9 @@ class BookmarkTransferTest
         this.transfer.importBookmarks(USER, json, false, 5L);
 
         List<BookmarkEntry> saved = captureSaved().getBookmarks();
-        assertTrue(saved.subList(0, BookmarkManager.MAX_PANEL_SIZE).stream().allMatch(BookmarkEntry::isPanel));
-        assertFalse(saved.get(BookmarkManager.MAX_PANEL_SIZE).isPanel());
+        int limit = BookmarkConfiguration.DEFAULT_PANEL_LIMIT;
+        assertTrue(saved.subList(0, limit).stream().allMatch(BookmarkEntry::isPanel));
+        assertFalse(saved.get(limit).isPanel());
     }
 
     @Test

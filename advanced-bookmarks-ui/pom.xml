@@ -68,7 +68,15 @@
       <version>${platform.version}</version>
       <scope>runtime</scope>
     </dependency>
-    <!-- The translation macro, used by the help text of the management page. -->
+    <!-- XWiki.ConfigurableClass, which adds the configuration to the wiki administration. -->
+    <dependency>
+      <groupId>org.xwiki.platform</groupId>
+      <artifactId>xwiki-platform-administration-ui</artifactId>
+      <version>${platform.version}</version>
+      <type>xar</type>
+      <scope>runtime</scope>
+    </dependency>
+    <!-- The translation macro, used by the help texts of the management page and of the administration. -->
     <dependency>
       <groupId>org.xwiki.platform</groupId>
       <artifactId>xwiki-platform-localization-macro</artifactId>

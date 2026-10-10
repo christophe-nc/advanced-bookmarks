@@ -35,6 +35,7 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkManager;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreConflictException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreException;
+import org.xwiki.contrib.advancedbookmarks.internal.BookmarkConfiguration;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkJsonCodec;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkPages;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkReferences;
@@ -55,6 +56,7 @@ import org.xwiki.test.mockito.MockitoComponentManager;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -81,6 +83,8 @@ class AdvancedBookmarksScriptServiceTest
 
     private static final String ERROR = "error";
 
+    private static final String BOOKMARKABLE = "bookmarkable";
+
     private static final String JSON = "{\"folders\":[],\"bookmarks\":[{\"page\":\"wiki:Space.Page\"}]}";
 
     @RegisterExtension
@@ -103,6 +107,9 @@ class AdvancedBookmarksScriptServiceTest
 
     @MockComponent
     private BookmarkTransfer transfer;
+
+    @MockComponent
+    private BookmarkConfiguration configuration;
 
     @BeforeComponent
     void registerReferences(MockitoComponentManager componentManager) throws Exception
@@ -192,7 +199,25 @@ class AdvancedBookmarksScriptServiceTest
     {
         when(this.bookmarkManager.isBookmarked(ALICE, PAGE)).thenReturn(true);
 
-        assertEquals(Map.of(STATUS, 200, "bookmarked", true), this.service.isBookmarked(PAGE_KEY));
+        assertEquals(Map.of(STATUS, 200, "bookmarked", true, BOOKMARKABLE, true), this.service.isBookmarked(PAGE_KEY));
+    }
+
+    @Test
+    void tellsWhetherAPageIsExcluded()
+    {
+        when(this.configuration.isExcluded(PAGE)).thenReturn(true);
+
+        assertEquals(false, this.service.isBookmarked(PAGE_KEY).get(BOOKMARKABLE));
+    }
+
+    @Test
+    void tellsWhetherTheStarIsEnabled()
+    {
+        assertFalse(this.service.isStarEnabled());
+
+        when(this.configuration.isStarEnabled()).thenReturn(true);
+
+        assertTrue(this.service.isStarEnabled());
     }
 
     @Test

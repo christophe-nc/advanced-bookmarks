@@ -464,16 +464,14 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-star-messages'],
     </property>
     <property>
       <content>{{velocity}}
-## The star is only offered to logged-in users viewing an existing page, outside of the extension's own pages
-## (the AdvancedBookmarks space and the panel, which lives in the Panels space by XWiki convention).
-#set ($isExtensionSpace = $doc.documentReference.spaceReferences.get(0).name == 'AdvancedBookmarks')
-#set ($isExtensionPage = $isExtensionSpace || $doc.fullName == 'Panels.MyBookmarks')
+## The star is only offered to logged-in users viewing an existing page, when the wiki enables it, and on pages that
+## may be bookmarked: neither excluded by the administrator nor part of the extension (decided on the server).
 #set ($isViewedPage = $xcontext.action == 'view' &amp;&amp; !$doc.isNew())
-#if ($xcontext.userReference &amp;&amp; $isViewedPage &amp;&amp; !$isExtensionPage &amp;&amp; $services.advancedbookmarks)
+#if ($xcontext.userReference &amp;&amp; $isViewedPage &amp;&amp; $services.advancedbookmarks &amp;&amp; $services.advancedbookmarks.isStarEnabled())
   #set ($pageReference = $services.model.serialize($doc.documentReference, 'default'))
   #set ($state = $services.advancedbookmarks.isBookmarked($pageReference))
   ## When the bookmarks cannot be read, no star is displayed rather than a misleading one.
-  #if ($state.status == 200)
+  #if ($state.status == 200 &amp;&amp; $state.bookmarkable)
     #set ($discard = $xwiki.jsx.use('AdvancedBookmarks.Code.StarUIX'))
     #set ($discard = $xwiki.ssx.use('AdvancedBookmarks.Code.StarUIX'))
     #if ($state.bookmarked)

@@ -75,6 +75,9 @@ public class DefaultBookmarkManager implements BookmarkManager
     private BookmarkPages pages;
 
     @Inject
+    private BookmarkConfiguration configuration;
+
+    @Inject
     private Logger logger;
 
     /**
@@ -172,10 +175,11 @@ public class DefaultBookmarkManager implements BookmarkManager
     @Override
     public List<BookmarkEntry> getPanel(BookmarkData data)
     {
+        int panelLimit = this.configuration.getPanelLimit();
         List<BookmarkEntry> ordered = getDisplayOrder(data);
         List<BookmarkEntry> selected =
-            ordered.stream().filter(BookmarkEntry::isPanel).limit(MAX_PANEL_SIZE).collect(Collectors.toList());
-        return selected.isEmpty() ? ordered.stream().limit(MAX_PANEL_SIZE).collect(Collectors.toList()) : selected;
+            ordered.stream().filter(BookmarkEntry::isPanel).limit(panelLimit).collect(Collectors.toList());
+        return selected.isEmpty() ? ordered.stream().limit(panelLimit).collect(Collectors.toList()) : selected;
     }
 
     private static void pushChildren(Deque<Step> stack, List<BookmarkFolder> children)
@@ -196,7 +200,8 @@ public class DefaultBookmarkManager implements BookmarkManager
     private BookmarkEntry createBookmark(DocumentReference page, String pageReference, BookmarkData data)
         throws BookmarkException
     {
-        if (!this.rights.canView(page)) {
+        // Only additions are refused: the bookmark of a page excluded afterwards can still be removed.
+        if (this.configuration.isExcluded(page) || !this.rights.canView(page)) {
             throw new BookmarkAccessDeniedException();
         }
         if (data.getBookmarks().size() >= BookmarkJsonCodec.MAX_ITEMS) {
