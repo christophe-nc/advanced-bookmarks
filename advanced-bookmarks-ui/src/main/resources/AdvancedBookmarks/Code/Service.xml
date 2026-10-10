@@ -47,6 +47,10 @@
 ##   export        [user=&lt;reference&gt;]
 ##   import        [user=&lt;reference&gt;], data=&lt;file content&gt;,
 ##                 mode=merge|replace, version              (POST, form_token)
+## Administration tools of the current wiki (administrators only):
+##   exportWiki
+##   startWikiImport  mode=merge|replace, file=&lt;file&gt;  (POST multipart, form_token)
+##   wikiImportStatus
 ## Rights, POST and CSRF checks are made by $services.advancedbookmarks: this
 ## page only dispatches the operation and sets the HTTP status.
 ## ---------------------------------------------------------------------------
@@ -67,6 +71,12 @@
     #set ($result = $services.advancedbookmarks.exportBookmarks("$!request.user"))
   #elseif ($operation == 'import')
     #set ($result = $services.advancedbookmarks.importBookmarks("$!request.user", "$!request.data", "$!request.mode", "$!request.version"))
+  #elseif ($operation == 'exportWiki')
+    #set ($result = $services.advancedbookmarks.admin.exportWiki())
+  #elseif ($operation == 'startWikiImport')
+    #set ($result = $services.advancedbookmarks.admin.startWikiImport("$!request.mode"))
+  #elseif ($operation == 'wikiImportStatus')
+    #set ($result = $services.advancedbookmarks.admin.getWikiImportStatus())
   #else
     #set ($result = {'status': 400, 'error': 'unknownOperation'})
   #end

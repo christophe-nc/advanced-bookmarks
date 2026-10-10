@@ -31,6 +31,10 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkFolder;
 import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreException;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -172,5 +176,33 @@ class BookmarkJsonCodecTest
         String json = "{\"folders\":[],\"bookmarks\":[" + "{},".repeat(BookmarkJsonCodec.MAX_ITEMS) + "{}]}";
 
         assertThrows(BookmarkInvalidDataException.class, () -> codec.read(json));
+    }
+
+    @Test
+    void convertsDataToAndFromAJsonObject() throws Exception
+    {
+        BookmarkEntry bookmark = new BookmarkEntry();
+        bookmark.setPage("Space.Page");
+        BookmarkData data = new BookmarkData();
+        data.setBookmarks(List.of(bookmark));
+
+        ObjectNode tree = codec.toTree(data);
+        assertEquals(codec.write(data), tree.toString());
+
+        // Other properties of the object, such as the user of a wiki export, are ignored.
+        tree.put("user", "XWiki.alice");
+        assertEquals("Space.Page", codec.read((JsonNode) tree).getBookmarks().get(0).getPage());
+    }
+
+    @Test
+    void rejectsAnInvalidJsonObject() throws Exception
+    {
+        ObjectMapper json = new ObjectMapper();
+        assertThrows(BookmarkInvalidDataException.class, () -> codec.read((JsonNode) null));
+        assertThrows(BookmarkInvalidDataException.class, () -> codec.read(json.readTree("[]")));
+        assertThrows(BookmarkInvalidDataException.class, () -> codec.read(json.readTree("{\"folders\":[]}")));
+        String oversized = "{\"folders\":[],\"bookmarks\":[{\"label\":\""
+            + "l".repeat(BookmarkJsonCodec.MAX_JSON_BYTES) + "\"}]}";
+        assertThrows(BookmarkInvalidDataException.class, () -> codec.read(json.readTree(oversized)));
     }
 }

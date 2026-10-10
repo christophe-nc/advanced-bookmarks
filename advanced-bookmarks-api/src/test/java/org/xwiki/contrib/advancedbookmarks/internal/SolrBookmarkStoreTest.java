@@ -29,9 +29,11 @@ import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
+import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.SolrInputDocument;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.ArgumentCaptor;
 import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkRecord;
@@ -40,7 +42,9 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkStoreException;
 import org.xwiki.search.solr.Solr;
 import org.xwiki.search.solr.SolrException;
 import org.xwiki.search.solr.XWikiSolrCore;
+import org.xwiki.test.LogLevel;
 import org.xwiki.test.annotation.ComponentList;
+import org.xwiki.test.junit5.LogCaptureExtension;
 import org.xwiki.test.junit5.mockito.ComponentTest;
 import org.xwiki.test.junit5.mockito.InjectMockComponents;
 import org.xwiki.test.junit5.mockito.MockComponent;
@@ -49,6 +53,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -90,15 +95,20 @@ class SolrBookmarkStoreTest
     @MockComponent
     private Solr solr;
 
+    @RegisterExtension
+    private LogCaptureExtension logCapture = new LogCaptureExtension(LogLevel.WARN);
+
     private SolrClient client;
+
+    private XWikiSolrCore core;
 
     @BeforeEach
     void setUp() throws Exception
     {
         this.client = mock(SolrClient.class);
-        XWikiSolrCore core = mock(XWikiSolrCore.class);
-        when(this.solr.getCore(SolrBookmarkStore.CORE_NAME)).thenReturn(core);
-        when(core.getClient()).thenReturn(this.client);
+        this.core = mock(XWikiSolrCore.class);
+        when(this.solr.getCore(SolrBookmarkStore.CORE_NAME)).thenReturn(this.core);
+        when(this.core.getClient()).thenReturn(this.client);
     }
 
     @Test
@@ -453,6 +463,34 @@ class SolrBookmarkStoreTest
     {
         return new org.apache.solr.common.SolrException(org.apache.solr.common.SolrException.ErrorCode.CONFLICT,
             "version conflict");
+    }
+
+    @Test
+    void isAvailableWhenAQueryWithoutRowsSucceeds() throws Exception
+    {
+        QueryResponse response = responseWith();
+        when(this.client.query(any(SolrQuery.class))).thenReturn(response);
+
+        assertTrue(this.store.isAvailable());
+
+        ArgumentCaptor<SolrQuery> query = ArgumentCaptor.forClass(SolrQuery.class);
+        verify(this.client).query(query.capture());
+        assertEquals(0, query.getValue().getRows());
+    }
+
+    @Test
+    void isNotAvailableWhenTheCoreOrTheServerFails() throws Exception
+    {
+        XWikiSolrCore coreWithoutClient = mock(XWikiSolrCore.class);
+        when(this.solr.getCore(SolrBookmarkStore.CORE_NAME)).thenThrow(new SolrException("missing core"))
+            .thenReturn(coreWithoutClient).thenReturn(this.core);
+        when(this.client.query(any(SolrQuery.class))).thenThrow(new IOException("down"))
+            .thenThrow(new org.apache.solr.common.SolrException(ErrorCode.SERVER_ERROR, "remote failure"));
+
+        for (int attempt = 0; attempt < 4; attempt++) {
+            assertFalse(this.store.isAvailable());
+            assertEquals("The bookmark storage is not available.", this.logCapture.getMessage(attempt));
+        }
     }
 
     private static QueryResponse responseWith(SolrDocument... sourceDocuments)

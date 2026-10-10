@@ -19,12 +19,18 @@
  */
 package org.xwiki.contrib.advancedbookmarks.internal;
 
+import java.io.IOException;
+import java.io.InputStream;
+
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.Part;
 
 import org.xwiki.component.annotation.Component;
+import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
 import org.xwiki.container.Container;
 import org.xwiki.container.Request;
 import org.xwiki.container.servlet.ServletRequest;
@@ -76,6 +82,56 @@ public class BookmarkRequests
     {
         HttpServletRequest request = getHttpRequest();
         return request != null ? request.getParameter(name) : null;
+    }
+
+    /**
+     * Read a file sent in a {@code multipart/form-data} request. Unlike URL-encoded form parameters, such files are
+     * not limited by the maximum POST size of the servlet container.
+     *
+     * @param name the name of the file part
+     * @param maxBytes the maximum size of the file
+     * @return the content of the file
+     * @throws BookmarkInvalidDataException if the request has no such file, or the file is larger than allowed
+     */
+    public byte[] readFile(String name, int maxBytes) throws BookmarkInvalidDataException
+    {
+        HttpServletRequest request = getHttpRequest();
+        if (request == null) {
+            throw new BookmarkInvalidDataException(null);
+        }
+        try {
+            Part part = request.getPart(name);
+            if (part == null || part.getSize() > maxBytes) {
+                throw new BookmarkInvalidDataException(null);
+            }
+            try (InputStream input = part.getInputStream()) {
+                // One more byte than allowed is read, in case the declared size is wrong.
+                byte[] content = input.readNBytes(maxBytes + 1);
+                if (content.length > maxBytes) {
+                    throw new BookmarkInvalidDataException(null);
+                }
+                return content;
+            }
+        } catch (IOException | ServletException | IllegalStateException e) {
+            // Also thrown when the request is not a multipart request.
+            throw new BookmarkInvalidDataException(e);
+        }
+    }
+
+    /**
+     * @param mode the import mode chosen by the user: {@code merge} or {@code replace}
+     * @return {@code true} for the {@code replace} mode
+     * @throws BookmarkInvalidDataException if the mode is neither of them
+     */
+    public static boolean isReplaceMode(String mode) throws BookmarkInvalidDataException
+    {
+        if ("replace".equals(mode)) {
+            return true;
+        }
+        if ("merge".equals(mode)) {
+            return false;
+        }
+        throw new BookmarkInvalidDataException(null);
     }
 
     private HttpServletRequest getHttpRequest()

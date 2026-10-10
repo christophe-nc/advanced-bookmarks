@@ -83,6 +83,13 @@
       <version>${platform.version}</version>
       <scope>runtime</scope>
     </dependency>
+    <!-- The include macro, which adds the administration tools to the administration section. -->
+    <dependency>
+      <groupId>org.xwiki.platform</groupId>
+      <artifactId>xwiki-platform-rendering-macro-include</artifactId>
+      <version>${platform.version}</version>
+      <scope>runtime</scope>
+    </dependency>
   </dependencies>
 
   <build>

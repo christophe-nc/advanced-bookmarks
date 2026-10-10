@@ -345,7 +345,9 @@
       <categoryIcon/>
     </property>
     <property>
-      <codeToExecute>{{translation key="advancedbookmarks.admin.help"/}}</codeToExecute>
+      <codeToExecute>{{translation key="advancedbookmarks.admin.help"/}}
+
+{{include reference="AdvancedBookmarks.Code.AdministrationTools"/}}</codeToExecute>
     </property>
     <property>
       <configurationClass>AdvancedBookmarks.Code.ConfigurationClass</configurationClass>

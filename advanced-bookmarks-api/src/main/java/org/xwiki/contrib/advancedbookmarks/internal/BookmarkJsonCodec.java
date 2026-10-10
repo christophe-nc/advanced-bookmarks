@@ -97,6 +97,40 @@ public class BookmarkJsonCodec
                 throw new BookmarkInvalidDataException(null);
             }
         }
+        return toData(root);
+    }
+
+    /**
+     * Convert a JSON object, such as an element of a wiki export file, into typed data, with the same limits as the
+     * JSON of one user. The version of the result is {@code 0}.
+     *
+     * @param node a JSON object with the {@code folders} and {@code bookmarks} properties; the other properties are
+     *            ignored
+     * @return the converted data, which may still need normalization
+     * @throws BookmarkInvalidDataException if the node is not such an object or exceeds the limits
+     */
+    public BookmarkData read(JsonNode node) throws BookmarkInvalidDataException
+    {
+        if (node == null || isTooLarge(node.toString())) {
+            throw new BookmarkInvalidDataException(null);
+        }
+        return toData(validate(node));
+    }
+
+    /**
+     * @param data the data to convert; the version is not converted
+     * @return a JSON object holding the {@code folders} and {@code bookmarks} of the data
+     */
+    public ObjectNode toTree(BookmarkData data)
+    {
+        ObjectNode root = JSON.createObjectNode();
+        root.set(FOLDERS, JSON.valueToTree(data.getFolders()));
+        root.set(BOOKMARKS, JSON.valueToTree(data.getBookmarks()));
+        return root;
+    }
+
+    private static BookmarkData toData(ObjectNode root) throws BookmarkInvalidDataException
+    {
         try {
             BookmarkData data = new BookmarkData();
             data.setFolders(Arrays.asList(JSON.treeToValue(root.get(FOLDERS), BookmarkFolder[].class)));
@@ -131,8 +165,7 @@ public class BookmarkJsonCodec
     {
         ObjectNode root = JSON.createObjectNode();
         header.forEach((name, value) -> root.set(name, JSON.valueToTree(value)));
-        root.set(FOLDERS, JSON.valueToTree(data.getFolders()));
-        root.set(BOOKMARKS, JSON.valueToTree(data.getBookmarks()));
+        root.setAll(toTree(data));
         String json = serialize(root);
         // Checked on writing too, since JSON that reading would reject could never be read back.
         if (isTooLarge(json)) {
@@ -210,6 +243,11 @@ public class BookmarkJsonCodec
         } catch (JsonProcessingException e) {
             throw new BookmarkInvalidDataException(e);
         }
+        return validate(root);
+    }
+
+    private static ObjectNode validate(JsonNode root) throws BookmarkInvalidDataException
+    {
         if (root == null || !root.isObject() || !isBoundedArray(root.get(FOLDERS))
             || !isBoundedArray(root.get(BOOKMARKS))) {
             throw new BookmarkInvalidDataException(null);

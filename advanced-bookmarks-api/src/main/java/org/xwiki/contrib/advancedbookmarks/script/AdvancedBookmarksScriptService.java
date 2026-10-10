@@ -19,31 +19,28 @@
  */
 package org.xwiki.contrib.advancedbookmarks.script;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
-import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
-import org.xwiki.contrib.advancedbookmarks.BookmarkAccessDeniedException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkData;
-import org.xwiki.contrib.advancedbookmarks.BookmarkException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkManager;
-import org.xwiki.contrib.advancedbookmarks.BookmarkStoreConflictException;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkConfiguration;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkJsonCodec;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkReferences;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkRequests;
+import org.xwiki.contrib.advancedbookmarks.internal.BookmarkResults;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkRights;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkTransfer;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkViews;
 import org.xwiki.model.reference.DocumentReference;
 import org.xwiki.model.reference.EntityReferenceSerializer;
 import org.xwiki.script.service.ScriptService;
+import org.xwiki.script.service.ScriptServiceManager;
 
 /**
  * Exposes bookmarks to scripts as maps ready to be serialized as JSON. Every result has a {@code status} key holding
@@ -52,34 +49,23 @@ import org.xwiki.script.service.ScriptService;
  * Details are logged on the server.
  * <p>
  * Write operations only accept POST requests carrying a valid CSRF token in the {@code form_token} parameter.
+ * <p>
+ * The administration tools are exposed by the {@code $services.advancedbookmarks.admin} sub-service.
  *
  * @version $Id$
  * @since 1.0
  */
 @Component
-@Named("advancedbookmarks")
+@Named(AdvancedBookmarksScriptService.ROLE_HINT)
 @Singleton
 public class AdvancedBookmarksScriptService implements ScriptService
 {
-    private static final String STATUS = "status";
-
-    private static final String ERROR = "error";
+    /** The hint of this script service, which prefixes the hints of its sub-services. */
+    public static final String ROLE_HINT = "advancedbookmarks";
 
     private static final String VERSION = "version";
 
     private static final String BOOKMARKS = "bookmarks";
-
-    private static final int OK = 200;
-
-    private static final int BAD_REQUEST = 400;
-
-    private static final int FORBIDDEN = 403;
-
-    private static final int METHOD_NOT_ALLOWED = 405;
-
-    private static final int CONFLICT = 409;
-
-    private static final int SERVER_ERROR = 500;
 
     @Inject
     private BookmarkManager bookmarkManager;
@@ -89,9 +75,6 @@ public class AdvancedBookmarksScriptService implements ScriptService
 
     @Inject
     private BookmarkJsonCodec jsonCodec;
-
-    @Inject
-    private BookmarkRequests requests;
 
     @Inject
     private BookmarkReferences references;
@@ -109,15 +92,22 @@ public class AdvancedBookmarksScriptService implements ScriptService
     private EntityReferenceSerializer<String> serializer;
 
     @Inject
-    private Logger logger;
+    private BookmarkResults results;
+
+    @Inject
+    private ScriptServiceManager scriptServiceManager;
 
     /**
-     * An operation on bookmarks, whose failures are translated into error results.
+     * Give access to the sub-services, such as {@code $services.advancedbookmarks.admin}.
+     *
+     * @param <S> the type of the sub-service
+     * @param serviceName the name of the sub-service
+     * @return the sub-service, or {@code null} if there is none with this name
      */
-    @FunctionalInterface
-    private interface Operation
+    @SuppressWarnings("unchecked")
+    public <S extends ScriptService> S get(String serviceName)
     {
-        Map<String, Object> run() throws BookmarkException;
+        return (S) this.scriptServiceManager.get(ROLE_HINT + '.' + serviceName);
     }
 
     /**
@@ -130,10 +120,10 @@ public class AdvancedBookmarksScriptService implements ScriptService
      */
     public Map<String, Object> getBookmarks(String user)
     {
-        return execute(() -> {
+        return this.results.execute(() -> {
             DocumentReference owner = this.references.resolveUser(user);
             BookmarkData data = this.bookmarkManager.getBookmarks(owner);
-            Map<String, Object> result = success();
+            Map<String, Object> result = BookmarkResults.success();
             result.put("user", this.serializer.serialize(owner));
             result.put(VERSION, String.valueOf(data.getVersion()));
             result.put("folders", this.views.getFolders(data.getFolders()));
@@ -147,9 +137,9 @@ public class AdvancedBookmarksScriptService implements ScriptService
      */
     public Map<String, Object> getPanel()
     {
-        return execute(() -> {
+        return this.results.execute(() -> {
             BookmarkData data = this.bookmarkManager.getBookmarks(this.rights.getCurrentUser());
-            Map<String, Object> result = success();
+            Map<String, Object> result = BookmarkResults.success();
             result.put(BOOKMARKS, this.views.getBookmarks(this.bookmarkManager.getPanel(data)));
             return result;
         });
@@ -162,7 +152,7 @@ public class AdvancedBookmarksScriptService implements ScriptService
      */
     public Map<String, Object> isBookmarked(String page)
     {
-        return execute(() -> {
+        return this.results.execute(() -> {
             DocumentReference pageReference = this.references.resolvePage(page);
             Map<String, Object> result =
                 bookmarked(this.bookmarkManager.isBookmarked(this.rights.getCurrentUser(), pageReference));
@@ -187,7 +177,7 @@ public class AdvancedBookmarksScriptService implements ScriptService
      */
     public Map<String, Object> toggle(String page)
     {
-        return executeWrite(() -> bookmarked(
+        return this.results.executeWrite(() -> bookmarked(
             this.bookmarkManager.toggle(this.rights.getCurrentUser(), this.references.resolvePage(page))));
     }
 
@@ -202,11 +192,11 @@ public class AdvancedBookmarksScriptService implements ScriptService
      */
     public Map<String, Object> save(String user, String json, String version)
     {
-        return executeWrite(() -> {
+        return this.results.executeWrite(() -> {
             DocumentReference owner = this.references.resolveUser(user);
             BookmarkData data = this.jsonCodec.read(json);
             data.setVersion(parseVersion(version));
-            Map<String, Object> result = success();
+            Map<String, Object> result = BookmarkResults.success();
             result.put(VERSION, String.valueOf(this.bookmarkManager.save(owner, data)));
             return result;
         });
@@ -221,8 +211,8 @@ public class AdvancedBookmarksScriptService implements ScriptService
      */
     public Map<String, Object> exportBookmarks(String user)
     {
-        return execute(() -> {
-            Map<String, Object> result = success();
+        return this.results.execute(() -> {
+            Map<String, Object> result = BookmarkResults.success();
             result.put("content", this.transfer.export(this.references.resolveUser(user)));
             return result;
         });
@@ -242,27 +232,16 @@ public class AdvancedBookmarksScriptService implements ScriptService
      */
     public Map<String, Object> importBookmarks(String user, String json, String mode, String version)
     {
-        return executeWrite(() -> {
+        return this.results.executeWrite(() -> {
             DocumentReference owner = this.references.resolveUser(user);
-            BookmarkTransfer.ImportResult imported =
-                this.transfer.importBookmarks(owner, json, isReplaceMode(mode), parseVersion(version));
-            Map<String, Object> result = success();
+            BookmarkTransfer.ImportResult imported = this.transfer.importBookmarks(owner, json,
+                BookmarkRequests.isReplaceMode(mode), parseVersion(version));
+            Map<String, Object> result = BookmarkResults.success();
             result.put(VERSION, String.valueOf(imported.version()));
             result.put("imported", imported.imported());
             result.put("skipped", imported.skipped());
             return result;
         });
-    }
-
-    private static boolean isReplaceMode(String mode) throws BookmarkInvalidDataException
-    {
-        if ("replace".equals(mode)) {
-            return true;
-        }
-        if ("merge".equals(mode)) {
-            return false;
-        }
-        throw new BookmarkInvalidDataException(null);
     }
 
     /**
@@ -282,52 +261,10 @@ public class AdvancedBookmarksScriptService implements ScriptService
         throw new BookmarkInvalidDataException(null);
     }
 
-    private Map<String, Object> executeWrite(Operation operation)
-    {
-        if (!this.requests.isPost()) {
-            return error(METHOD_NOT_ALLOWED, "methodNotAllowed");
-        }
-        if (!this.requests.hasValidToken()) {
-            return error(FORBIDDEN, "invalidToken");
-        }
-        return execute(operation);
-    }
-
-    private Map<String, Object> execute(Operation operation)
-    {
-        try {
-            return operation.run();
-        } catch (BookmarkAccessDeniedException e) {
-            return error(FORBIDDEN, "forbidden");
-        } catch (BookmarkInvalidDataException e) {
-            return error(BAD_REQUEST, "invalid");
-        } catch (BookmarkStoreConflictException e) {
-            return error(CONFLICT, "conflict");
-        } catch (BookmarkException e) {
-            this.logger.error("Advanced Bookmarks operation failed.", e);
-            return error(SERVER_ERROR, "storageError");
-        }
-    }
-
     private static Map<String, Object> bookmarked(boolean bookmarked)
     {
-        Map<String, Object> result = success();
+        Map<String, Object> result = BookmarkResults.success();
         result.put("bookmarked", bookmarked);
-        return result;
-    }
-
-    private static Map<String, Object> success()
-    {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put(STATUS, OK);
-        return result;
-    }
-
-    private static Map<String, Object> error(int status, String code)
-    {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put(STATUS, status);
-        result.put(ERROR, code);
         return result;
     }
 }

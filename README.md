@@ -34,12 +34,31 @@ Each wiki has its own settings, in *Administration > Other > Advanced Bookmarks*
 
 The pages of the extension itself (the `AdvancedBookmarks` space and `Panels.MyBookmarks`) are always excluded.
 
+## Administration tools
+
+The same administration section, above the settings, offers tools reserved to the administrators of the wiki:
+
+- **Storage**: whether the `advancedbookmarks` Solr core can be queried. When it cannot, the cause is written to the server logs.
+- **Export all the bookmarks**: downloads the bookmarks of all the users of the wiki as a single JSON file. Users whose bookmarks cannot be read (corrupted data, or leftovers of a user who no longer exists) are skipped and logged. An export larger than the import limit is refused.
+- **Import…**: imports such a file in the background, user by user, in the `merge` or `replace` mode of the individual import, with a progress bar. The whole file is validated before anything is written: an invalid file changes nothing. Users of the file who do not exist in the wiki are skipped; if the bookmarks of a user keep being modified during the import, or cannot be stored, that user is counted as failed and logged, and the import goes on. Only one import of a wiki runs at a time. The file is sent as `multipart/form-data`, so it is not limited by the maximum POST size of the servlet container; it holds at most 10,000 users and 32 MB, each user being limited like an individual export (10,000 folders or bookmarks, 1 MB).
+
+The wiki export file has this format:
+
+```json
+{"format": "advanced-bookmarks-wiki", "formatVersion": 1, "exportedAt": "2026-10-10T08:00:00Z",
+ "users": [{"user": "XWiki.jdoe",
+            "folders": [{"id": "f1", "name": "Work", "parent": "", "order": 0}],
+            "bookmarks": [{"page": "Sandbox.WebHome", "label": "", "folder": "f1", "order": 0, "panel": false}]}]}
+```
+
+Local users are written without their wiki, so that the file can be imported into another wiki; global users of a farm keep the main wiki prefix (`xwiki:XWiki.jdoe`), so that they stay global.
+
 ## Modules
 
 | Module | Packaging | Content |
 | --- | --- | --- |
 | `advanced-bookmarks-api` | JAR | Storage, business logic, rights, script service, `{{bookmarks/}}` macro with its JavaScript and CSS, and translations. |
-| `advanced-bookmarks-ui` | XAR | Wiki pages: JSON service, star, panel, management page, profile tab and configuration. |
+| `advanced-bookmarks-ui` | XAR | Wiki pages: JSON service, star, panel, management page, profile tab, configuration and administration tools. |
 
 ## Access rules
 
@@ -68,7 +87,16 @@ The extension does not require programming rights.
 | `exportBookmarks(user)` | Export file of the bookmarks of a user, as a JSON string under the `content` key. |
 | `importBookmarks(user, json, mode, version)` | Import an export file in the `merge` or `replace` mode, provided the bookmarks were not modified since `version` was read. Returns the new `version` and the number of bookmarks `imported` and `skipped`. Write operation. |
 
-The page `AdvancedBookmarks.Code.Service` exposes the same operations over HTTP, with the `get` action and an `operation` parameter (`isBookmarked`, `toggle`, `getBookmarks`, `save`, `export`, `import`); it returns the result as JSON with the matching HTTP status.
+`$services.advancedbookmarks.admin` exposes the administration tools of the current wiki, with the same kind of results. Every method returns `forbidden` to users who do not administer the wiki.
+
+| Method | Description |
+| --- | --- |
+| `getStoreStatus()` | Whether the storage can be queried, under the `available` key. |
+| `exportWiki()` | Wiki export file under the `content` key, with the number of users `exported` and `skipped`. |
+| `startWikiImport(mode)` | Validate the wiki export file sent in the `file` part of the current `multipart/form-data` request, then import it in the background in the `merge` or `replace` mode. Returns the number of `users` of the file; `conflict` if an import of the wiki is already running. Write operation. |
+| `getWikiImportStatus()` | `state` of the running or last import (`none`, `running` or `finished`) and, unless `none`, its `progress` (percentage), the counts `importedUsers`, `skippedUsers`, `failedUsers`, `importedBookmarks` and `skippedBookmarks`, and `failed` if it stopped on an unexpected error. |
+
+The page `AdvancedBookmarks.Code.Service` exposes the same operations over HTTP, with the `get` action and an `operation` parameter (`isBookmarked`, `toggle`, `getBookmarks`, `save`, `export`, `import`, and for administrators `exportWiki`, `startWikiImport`, `wikiImportStatus`); it returns the result as JSON with the matching HTTP status.
 
 ## Data lifecycle
 
@@ -84,7 +112,7 @@ The core is initialized by the extension when the XWiki Solr configuration suppo
 
 The bookmark core is not rebuilt from the XWiki database. Include its data directory in regular, consistent backups. In the default local setup, this is under the permanent XWiki data directory. For remote Solr, back up the corresponding core using the Solr operator's established backup procedure. Restoring the core requires a backup made with a compatible Solr installation.
 
-Users (and administrators, for any user) can also keep a copy of bookmarks with the *Export* button of the management page, and restore it with *Import…* in replace mode. The export file has this format:
+Administrators can also keep a copy of the bookmarks of a whole wiki with the [administration tools](#administration-tools). Users (and administrators, for any user) can keep a copy of bookmarks with the *Export* button of the management page, and restore it with *Import…* in replace mode. The export file has this format:
 
 ```json
 {"format": "advanced-bookmarks", "formatVersion": 1, "exportedAt": "2026-10-10T08:00:00Z",

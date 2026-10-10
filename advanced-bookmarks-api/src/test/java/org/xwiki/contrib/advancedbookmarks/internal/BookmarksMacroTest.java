@@ -28,6 +28,7 @@ import javax.inject.Named;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.mockito.InOrder;
 import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
 import org.xwiki.localization.ContextualLocalizationManager;
 import org.xwiki.model.reference.DocumentReference;
@@ -51,6 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -166,7 +168,9 @@ class BookmarksMacroTest
         assertEquals(Map.of(CLASS, CONTAINER, USER, "wiki:XWiki.alice", PANEL_LIMIT, "15"),
             blocks.get(0).getParameters());
         assertEquals(List.of("advancedbookmarks.manager.loading[]"), words(blocks.get(0)));
-        verify(this.jsrx).use("advancedbookmarks/manager.js");
+        InOrder scripts = inOrder(this.jsrx);
+        scripts.verify(this.jsrx).use("advancedbookmarks/common.js");
+        scripts.verify(this.jsrx).use("advancedbookmarks/manager.js");
         verify(this.ssrx).use("advancedbookmarks/manager.css");
         verifyNoInteractions(this.jsfx);
     }

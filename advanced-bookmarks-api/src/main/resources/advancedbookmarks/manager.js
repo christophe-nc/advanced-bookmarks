@@ -24,70 +24,67 @@
  * Security: every text coming from the server or the user is inserted with textContent or as an attribute value,
  * never as HTML. The server checks all the rights again.
  */
-define('advanced-bookmarks-manager-messages', {
-  prefix: 'advancedbookmarks.',
-  keys: [
-    'manager.newFolder',
-    'manager.newFolderName',
-    'manager.addSubfolder',
-    'manager.uncategorized',
-    'manager.root',
-    'manager.filter',
-    'manager.panel',
-    'manager.panelCount',
-    'manager.panelCountAuto',
-    'manager.panelLimitReached',
-    'manager.rename',
-    'manager.moveUp',
-    'manager.moveDown',
-    'manager.moveTo',
-    'manager.remove',
-    'manager.deleteFolder',
-    'manager.confirmRemove',
-    'manager.confirmDeleteFolder',
-    'manager.deleted',
-    'manager.inaccessible',
-    'manager.empty',
-    'manager.emptyFolder',
-    'manager.noResult',
-    'manager.loading',
-    'manager.saving',
-    'manager.saved',
-    'manager.saveFailed',
-    'manager.retry',
-    'manager.conflict',
-    'manager.loadFailed',
-    'manager.expand',
-    'manager.collapse',
-    'manager.labelPlaceholder',
-    'manager.userPicker',
-    'manager.export',
-    'manager.import',
-    'manager.exportFailed',
-    'manager.importTooLarge',
-    'manager.importFile',
-    'manager.importMerge',
-    'manager.importReplace',
-    'manager.importReplaceWarning',
-    'manager.importConfirm',
-    'manager.cancel',
-    'manager.importing',
-    'manager.importDone',
-    'manager.importFailed',
-    'manager.importInvalid',
-    'error.forbidden',
-    'error.invalidToken',
-    'error.methodNotAllowed',
-    'error.invalid',
-    'error.conflict',
-    'error.storageError',
-    'error.unavailable',
-    'error.unknownOperation',
-    'error.network'
-  ]
+define('advanced-bookmarks-manager-messages', ['advanced-bookmarks-common'], function(common) {
+  return {
+    prefix: 'advancedbookmarks.',
+    keys: [
+      'manager.newFolder',
+      'manager.newFolderName',
+      'manager.addSubfolder',
+      'manager.uncategorized',
+      'manager.root',
+      'manager.filter',
+      'manager.panel',
+      'manager.panelCount',
+      'manager.panelCountAuto',
+      'manager.panelLimitReached',
+      'manager.rename',
+      'manager.moveUp',
+      'manager.moveDown',
+      'manager.moveTo',
+      'manager.remove',
+      'manager.deleteFolder',
+      'manager.confirmRemove',
+      'manager.confirmDeleteFolder',
+      'manager.deleted',
+      'manager.inaccessible',
+      'manager.empty',
+      'manager.emptyFolder',
+      'manager.noResult',
+      'manager.loading',
+      'manager.saving',
+      'manager.saved',
+      'manager.saveFailed',
+      'manager.retry',
+      'manager.conflict',
+      'manager.loadFailed',
+      'manager.expand',
+      'manager.collapse',
+      'manager.labelPlaceholder',
+      'manager.userPicker',
+      'manager.export',
+      'manager.import',
+      'manager.exportFailed',
+      'manager.importTooLarge',
+      'manager.importFile',
+      'manager.importMerge',
+      'manager.importReplace',
+      'manager.importReplaceWarning',
+      'manager.importConfirm',
+      'manager.cancel',
+      'manager.importing',
+      'manager.importDone',
+      'manager.importFailed',
+      'manager.importInvalid'
+    ].concat(common.errorKeys)
+  };
 });
-require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages'], function($, xm, l10n) {
+require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-manager-messages'],
+    function($, common, l10n) {
   'use strict';
+
+  var createElement = common.createElement;
+  var notify = common.notify;
 
   // Mirrors of the server-side limits (BookmarkNormalizer), so that the user sees what will be saved.
   var MAX_FOLDER_NAME_LENGTH = 100;
@@ -105,44 +102,8 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages
   // Protection against cycles in corrupted data.
   var MAX_DEPTH = 100;
 
-  var serviceReference = XWiki.Model.resolve('AdvancedBookmarks.Code.Service', XWiki.EntityType.DOCUMENT);
-  var serviceURL = new XWiki.Document(serviceReference).getURL('get');
-
   var t = function(key) {
     return l10n.get.apply(l10n, ['manager.' + key].concat(Array.prototype.slice.call(arguments, 1)));
-  };
-
-  var notify = function(message, type) {
-    new XWiki.widgets.Notification(message, type || 'done');
-  };
-
-  /**
-   * Create an element. Attributes: "text" sets the text content, "className" the class, a false, null or undefined
-   * value is ignored, a property of the element (such as "checked") is set as such, anything else as an attribute.
-   */
-  var createElement = function(tagName, attributes, children) {
-    var element = document.createElement(tagName);
-    Object.keys(attributes || {}).forEach(function(name) {
-      var value = attributes[name];
-      if (value === null || value === undefined || value === false) {
-        return;
-      }
-      if (name === 'text') {
-        element.textContent = value;
-      } else if (name === 'className') {
-        element.className = value;
-      } else if (name in element && name.indexOf('-') < 0 && name !== 'draggable') {
-        element[name] = value;
-      } else {
-        element.setAttribute(name, value === true ? '' : value);
-      }
-    });
-    (children || []).forEach(function(child) {
-      if (child !== null && child !== undefined) {
-        element.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
-      }
-    });
-    return element;
   };
 
   var createButton = function(action, symbol, title, className) {
@@ -347,30 +308,7 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages
     // ------------------------------------------------------------------
     var call = function(parameters, post) {
       parameters.user = user;
-      var body = new URLSearchParams(parameters);
-      var options = {credentials: 'same-origin', headers: {'Accept': 'application/json'}};
-      var url = serviceURL;
-      if (post) {
-        body.append('form_token', xm.form_token);
-        options.method = 'POST';
-        options.body = body;
-      } else {
-        url += (url.indexOf('?') < 0 ? '?' : '&') + body.toString();
-      }
-      return fetch(url, options).then(function(response) {
-        return response.json().catch(function() {
-          return {};
-        }).then(function(json) {
-          if (!response.ok) {
-            var error = new Error(l10n.get('error.' + (json.error || 'network')));
-            error.status = response.status;
-            throw error;
-          }
-          return json;
-        });
-      }, function() {
-        throw new Error(l10n.get('error.network'));
-      });
+      return common.callService(l10n, parameters, post);
     };
 
     var load = function() {
@@ -767,20 +705,12 @@ require(['jquery', 'xwiki-meta', 'xwiki-l10n!advanced-bookmarks-manager-messages
     var getExportFileName = function() {
       // "xwiki:XWiki.jdoe" gives "jdoe"; characters that some file systems refuse are replaced.
       var name = user.replace(/^.*[.:]/, '').replace(/[^\w-]+/g, '_');
-      return 'bookmarks-' + name + '-' + new Date().toISOString().slice(0, 10) + '.json';
+      return 'bookmarks-' + name + '-' + common.getDateForFileName() + '.json';
     };
 
     var exportBookmarks = function() {
       call({operation: 'export'}).then(function(result) {
-        var url = URL.createObjectURL(new Blob([result.content], {type: 'application/json'}));
-        var link = createElement('a', {href: url, download: getExportFileName(), className: 'hidden'});
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        // Revoked later rather than immediately, since some browsers start the download asynchronously.
-        window.setTimeout(function() {
-          URL.revokeObjectURL(url);
-        }, 60000);
+        common.downloadFile(result.content, getExportFileName());
       }).catch(function(error) {
         notify(t('exportFailed') + ' ' + error.message, 'error');
       });

@@ -42,6 +42,7 @@ import javax.inject.Named;
 import javax.inject.Singleton;
 
 import org.xwiki.component.annotation.Component;
+import org.xwiki.contrib.advancedbookmarks.BookmarkAccessDeniedException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkData;
 import org.xwiki.contrib.advancedbookmarks.BookmarkEntry;
 import org.xwiki.contrib.advancedbookmarks.BookmarkException;
@@ -72,9 +73,14 @@ public class BookmarkTransfer
     /** Version of the export format, in the {@code formatVersion} property. */
     public static final int FORMAT_VERSION = 1;
 
-    private static final String FORMAT_KEY = "format";
+    /** Version given to {@link #importData} to import into the current bookmarks, whatever their version. */
+    public static final long ANY_VERSION = -1;
 
-    private static final String FORMAT_VERSION_KEY = "formatVersion";
+    /** Property of an export file holding the kind of file. */
+    public static final String FORMAT_KEY = "format";
+
+    /** Property of an export file holding the version of its format. */
+    public static final String FORMAT_VERSION_KEY = "formatVersion";
 
     @Inject
     private BookmarkManager bookmarkManager;
@@ -118,16 +124,35 @@ public class BookmarkTransfer
      */
     public String export(DocumentReference user) throws BookmarkException
     {
+        return this.jsonCodec.write(exportData(user), createHeader(FORMAT));
+    }
+
+    /**
+     * @param user the owner of the bookmarks
+     * @return the bookmarks of the user as they are exported: page references without their wiki
+     * @throws BookmarkException if the current user may not manage these bookmarks, or they cannot be read
+     */
+    public BookmarkData exportData(DocumentReference user) throws BookmarkException
+    {
         // The data is read for this export only, so it can be modified in place.
         BookmarkData data = this.bookmarkManager.getBookmarks(user);
         for (BookmarkEntry bookmark : data.getBookmarks()) {
             bookmark.setPage(this.localSerializer.serialize(this.resolver.resolve(bookmark.getPage())));
         }
+        return data;
+    }
+
+    /**
+     * @param format the value of the {@code format} property, which identifies the kind of export file
+     * @return the properties written at the beginning of an export file
+     */
+    public static Map<String, Object> createHeader(String format)
+    {
         Map<String, Object> header = new LinkedHashMap<>();
-        header.put(FORMAT_KEY, FORMAT);
+        header.put(FORMAT_KEY, format);
         header.put(FORMAT_VERSION_KEY, FORMAT_VERSION);
         header.put("exportedAt", Instant.now().toString());
-        return this.jsonCodec.write(data, header);
+        return header;
     }
 
     /**
@@ -144,10 +169,33 @@ public class BookmarkTransfer
     public ImportResult importBookmarks(DocumentReference user, String json, boolean replace, long version)
         throws BookmarkException
     {
+        // Checked before the file is read, so that a user without rights cannot have it parsed.
+        if (!this.bookmarkManager.canManage(user)) {
+            throw new BookmarkAccessDeniedException();
+        }
+        return importData(user, this.jsonCodec.read(json, Map.of(FORMAT_KEY, FORMAT, FORMAT_VERSION_KEY,
+            FORMAT_VERSION)), replace, version);
+    }
+
+    /**
+     * Import exported bookmarks into the bookmarks of a user, provided they have not been modified since they were
+     * read.
+     *
+     * @param user the owner of the bookmarks
+     * @param imported the imported folders and bookmarks, page references being resolved in the current wiki; they
+     *            are modified by the import
+     * @param replace {@code true} to replace the existing bookmarks, {@code false} to merge the file with them
+     * @param version the version the bookmarks were read at, {@code 0} if there were none, or {@link #ANY_VERSION}
+     *            to import into the current bookmarks whatever their version
+     * @return the new version and the number of bookmarks imported and skipped
+     * @throws BookmarkException if the current user may not manage these bookmarks, the result exceeds the limits,
+     *             the bookmarks were modified since they were read, or they cannot be stored
+     */
+    public ImportResult importData(DocumentReference user, BookmarkData imported, boolean replace, long version)
+        throws BookmarkException
+    {
         BookmarkData current = this.bookmarkManager.getBookmarks(user);
-        BookmarkData imported =
-            this.jsonCodec.read(json, Map.of(FORMAT_KEY, FORMAT, FORMAT_VERSION_KEY, FORMAT_VERSION));
-        if (current.getVersion() != version) {
+        if (version != ANY_VERSION && current.getVersion() != version) {
             // Checked now rather than only by the store, since a merge must start from what the user saw.
             throw new BookmarkStoreConflictException(null);
         }
@@ -165,7 +213,8 @@ public class BookmarkTransfer
             merge(current, imported);
             result = current;
         }
-        result.setVersion(version);
+        // The version that was read: the store still detects a modification made since then.
+        result.setVersion(current.getVersion());
         long newVersion = this.bookmarkManager.save(user, result);
         // The save normalizes the result in place, so its size accounts for the bookmarks that were dropped.
         int importedCount = result.getBookmarks().size() - keptCount;

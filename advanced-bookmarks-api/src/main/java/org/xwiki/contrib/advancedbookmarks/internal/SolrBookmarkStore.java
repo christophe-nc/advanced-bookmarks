@@ -226,6 +226,22 @@ public class SolrBookmarkStore implements BookmarkStore
         return queryUsers(wiki, null, null);
     }
 
+    @Override
+    public boolean isAvailable()
+    {
+        try {
+            // A query without rows also detects a remote Solr server that is down, unlike the core lookup alone.
+            SolrQuery query = new SolrQuery(ALL_DOCUMENTS);
+            query.setRows(0);
+            getSolrClient().query(query);
+            return true;
+        } catch (SolrException | SolrServerException | IOException | BookmarkStoreException
+            | org.apache.solr.common.SolrException e) {
+            this.logger.warn("The bookmark storage is not available.", e);
+            return false;
+        }
+    }
+
     /**
      * Replace a page in the bookmarks of one user, re-reading the document after each version conflict.
      *

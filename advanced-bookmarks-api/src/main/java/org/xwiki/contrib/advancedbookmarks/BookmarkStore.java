@@ -116,4 +116,11 @@ public interface BookmarkStore
      * @throws BookmarkStoreException if the storage cannot be updated
      */
     void deleteWiki(String wiki) throws BookmarkStoreException;
+
+    /**
+     * Check that the storage can be queried. The cause of an unavailability is logged, not returned.
+     *
+     * @return {@code true} if the storage is available
+     */
+    boolean isAvailable();
 }

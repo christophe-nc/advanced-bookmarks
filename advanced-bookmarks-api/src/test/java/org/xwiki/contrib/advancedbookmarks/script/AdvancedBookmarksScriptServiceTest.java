@@ -40,11 +40,14 @@ import org.xwiki.contrib.advancedbookmarks.internal.BookmarkJsonCodec;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkPages;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkReferences;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkRequests;
+import org.xwiki.contrib.advancedbookmarks.internal.BookmarkResults;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkRights;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkTransfer;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkViews;
 import org.xwiki.contrib.advancedbookmarks.internal.ReferenceStubs;
 import org.xwiki.model.reference.DocumentReference;
+import org.xwiki.script.service.ScriptService;
+import org.xwiki.script.service.ScriptServiceManager;
 import org.xwiki.test.annotation.BeforeComponent;
 import org.xwiki.test.annotation.ComponentList;
 import org.xwiki.test.LogLevel;
@@ -56,8 +59,10 @@ import org.xwiki.test.mockito.MockitoComponentManager;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -68,7 +73,7 @@ import static org.mockito.Mockito.when;
  * @version $Id$
  */
 @ComponentTest
-@ComponentList({ BookmarkJsonCodec.class, BookmarkReferences.class, BookmarkViews.class })
+@ComponentList({ BookmarkJsonCodec.class, BookmarkReferences.class, BookmarkResults.class, BookmarkViews.class })
 class AdvancedBookmarksScriptServiceTest
 {
     private static final DocumentReference ALICE = ReferenceStubs.page("wiki:XWiki.alice");
@@ -111,6 +116,9 @@ class AdvancedBookmarksScriptServiceTest
     @MockComponent
     private BookmarkConfiguration configuration;
 
+    @MockComponent
+    private ScriptServiceManager scriptServiceManager;
+
     @BeforeComponent
     void registerReferences(MockitoComponentManager componentManager) throws Exception
     {
@@ -126,6 +134,15 @@ class AdvancedBookmarksScriptServiceTest
         when(this.rights.canView(any())).thenReturn(true);
         when(this.pages.exists(any())).thenReturn(true);
         when(this.pages.getURL(PAGE)).thenReturn("/bin/view/Space/Page");
+    }
+
+    @Test
+    void givesAccessToTheSubServices()
+    {
+        ScriptService admin = mock(ScriptService.class);
+        when(this.scriptServiceManager.get("advancedbookmarks.admin")).thenReturn(admin);
+
+        assertSame(admin, this.service.get("admin"));
     }
 
     @Test

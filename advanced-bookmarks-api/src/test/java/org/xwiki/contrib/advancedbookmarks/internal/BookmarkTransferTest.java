@@ -94,6 +94,7 @@ class BookmarkTransferTest
         this.jsonCodec = componentManager.getInstance(BookmarkJsonCodec.class);
         BookmarkNormalizer normalizer = componentManager.getInstance(BookmarkNormalizer.class);
         when(this.rights.getCurrentWiki()).thenReturn(ReferenceStubs.WIKI);
+        when(this.bookmarkManager.canManage(USER)).thenReturn(true);
         when(this.configuration.getPanelLimit()).thenReturn(BookmarkConfiguration.DEFAULT_PANEL_LIMIT);
         // Like the real manager, the save normalizes the data in place.
         when(this.bookmarkManager.save(eq(USER), any())).thenAnswer(invocation -> {
@@ -249,10 +250,35 @@ class BookmarkTransferTest
     @Test
     void checksTheRightsBeforeReadingTheFile() throws Exception
     {
+        when(this.bookmarkManager.canManage(USER)).thenReturn(false);
         when(this.bookmarkManager.getBookmarks(USER)).thenThrow(new BookmarkAccessDeniedException());
 
         assertThrows(BookmarkAccessDeniedException.class, () -> this.transfer.importBookmarks(USER, "{", true, 0L));
         assertThrows(BookmarkAccessDeniedException.class, () -> this.transfer.export(USER));
+    }
+
+    @Test
+    void importsIntoTheCurrentBookmarksWhateverTheirVersion() throws Exception
+    {
+        when(this.bookmarkManager.getBookmarks(USER))
+            .thenReturn(data(6L, List.of(), List.of(bookmark("wiki:Space.Kept", "", 0, false))));
+        BookmarkData imported = data(0L, List.of(), List.of(bookmark("Space.New", "", 0, false)));
+
+        assertEquals(new BookmarkTransfer.ImportResult(8L, 1, 0),
+            this.transfer.importData(USER, imported, false, BookmarkTransfer.ANY_VERSION));
+
+        // The version that was read is still checked by the store.
+        assertEquals(6L, captureSaved().getVersion());
+    }
+
+    @Test
+    void createsTheHeaderOfAnExportFile()
+    {
+        Map<String, Object> header = BookmarkTransfer.createHeader("test");
+
+        assertEquals(List.of("format", "formatVersion", "exportedAt"), List.copyOf(header.keySet()));
+        assertEquals("test", header.get("format"));
+        assertEquals(1, header.get("formatVersion"));
     }
 
     private BookmarkData captureSaved() throws Exception

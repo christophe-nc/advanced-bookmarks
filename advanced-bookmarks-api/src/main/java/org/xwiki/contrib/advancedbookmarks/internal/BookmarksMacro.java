@@ -152,6 +152,8 @@ public class BookmarksMacro extends AbstractMacro<BookmarksMacroParameters>
             return List.of(message("errormessage", "forbidden"));
         }
 
+        // The shared helpers must be loaded before the script that requires them.
+        this.jsrx.use("advancedbookmarks/common.js");
         this.jsrx.use("advancedbookmarks/manager.js");
         this.ssrx.use("advancedbookmarks/manager.css");
 
