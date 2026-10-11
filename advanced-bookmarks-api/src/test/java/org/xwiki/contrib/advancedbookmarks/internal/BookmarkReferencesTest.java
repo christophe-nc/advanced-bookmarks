@@ -29,8 +29,10 @@ import org.xwiki.test.junit5.mockito.MockComponent;
 import org.xwiki.test.mockito.MockitoComponentManager;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 /**
@@ -91,5 +93,18 @@ class BookmarkReferencesTest
         assertThrows(BookmarkInvalidDataException.class, () -> this.references.resolvePage(""));
         assertThrows(BookmarkInvalidDataException.class, () -> this.references.resolvePage(TOO_LONG));
         assertThrows(BookmarkInvalidDataException.class, () -> this.references.resolveUser(TOO_LONG));
+    }
+
+    @Test
+    void acceptsOnlyNonBlankTextsWithinTheMaximumLength()
+    {
+        assertTrue(BookmarkReferences.isValidText("abc", 3));
+        assertFalse(BookmarkReferences.isValidText("abcd", 3));
+        assertFalse(BookmarkReferences.isValidText(null, 3));
+        assertFalse(BookmarkReferences.isValidText("", 3));
+        assertFalse(BookmarkReferences.isValidText(" \t", 3));
+
+        assertTrue(BookmarkReferences.isValidReference(TOO_LONG.substring(1)));
+        assertFalse(BookmarkReferences.isValidReference(TOO_LONG));
     }
 }

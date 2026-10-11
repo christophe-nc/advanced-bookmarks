@@ -26,12 +26,13 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import javax.inject.Inject;
+import javax.inject.Named;
 import javax.inject.Singleton;
 
-import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.contrib.advancedbookmarks.BookmarkAccessDeniedException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkData;
@@ -42,9 +43,9 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkManager;
 import org.xwiki.contrib.advancedbookmarks.BookmarkRecord;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStore;
-import org.xwiki.contrib.advancedbookmarks.BookmarkStoreConflictException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreException;
 import org.xwiki.model.reference.DocumentReference;
+import org.xwiki.model.reference.DocumentReferenceResolver;
 
 /**
  * Default implementation of {@link BookmarkManager}, storing the bookmarks of each user of the current wiki through
@@ -57,8 +58,6 @@ import org.xwiki.model.reference.DocumentReference;
 @Singleton
 public class DefaultBookmarkManager implements BookmarkManager
 {
-    private static final int MAX_TOGGLE_ATTEMPTS = 3;
-
     @Inject
     private BookmarkStore store;
 
@@ -78,7 +77,8 @@ public class DefaultBookmarkManager implements BookmarkManager
     private BookmarkConfiguration configuration;
 
     @Inject
-    private Logger logger;
+    @Named("current")
+    private DocumentReferenceResolver<String> pageResolver;
 
     /**
      * A step of the depth-first traversal of the folder tree: either visit a folder, or emit its own bookmarks.
@@ -94,6 +94,12 @@ public class DefaultBookmarkManager implements BookmarkManager
     }
 
     @Override
+    public boolean canAdd(DocumentReference user, DocumentReference page)
+    {
+        return !this.configuration.isExcluded(page) && this.rights.canView(user, page);
+    }
+
+    @Override
     public BookmarkData getBookmarks(DocumentReference user) throws BookmarkException
     {
         checkAccess(user);
@@ -104,8 +110,9 @@ public class DefaultBookmarkManager implements BookmarkManager
     public boolean isBookmarked(DocumentReference user, DocumentReference page) throws BookmarkException
     {
         checkAccess(user);
-        String pageReference = this.normalizer.serialize(page);
-        return read(user).getBookmarks().stream().anyMatch(bookmark -> pageReference.equals(bookmark.getPage()));
+        // Stored references are the serialized references of the normalized bookmarks, like this one.
+        return this.store.containsPage(this.rights.getCurrentWiki(), this.normalizer.serialize(user),
+            this.normalizer.serialize(page));
     }
 
     @Override
@@ -117,23 +124,16 @@ public class DefaultBookmarkManager implements BookmarkManager
             throw new BookmarkInvalidDataException(null);
         }
         String pageReference = this.normalizer.serialize(page);
-        for (int attempt = 1;; attempt++) {
+        // Usually another browser tab: each attempt re-reads the bookmarks and applies the toggle on the latest data.
+        return BookmarkRetries.onConflict(() -> {
             BookmarkData data = read(user);
             boolean removed = data.getBookmarks().removeIf(bookmark -> pageReference.equals(bookmark.getPage()));
             if (!removed) {
-                data.getBookmarks().add(createBookmark(page, pageReference, data));
+                data.getBookmarks().add(createBookmark(user, page, pageReference, data));
             }
-            try {
-                write(user, data);
-                return !removed;
-            } catch (BookmarkStoreConflictException e) {
-                // Usually another browser tab: re-read and apply the toggle on the latest data.
-                if (attempt >= MAX_TOGGLE_ATTEMPTS) {
-                    throw e;
-                }
-                this.logger.debug("Retrying a bookmark toggle after a version conflict.");
-            }
-        }
+            write(user, data);
+            return !removed;
+        });
     }
 
     @Override
@@ -141,6 +141,7 @@ public class DefaultBookmarkManager implements BookmarkManager
     {
         checkAccess(user);
         this.normalizer.normalize(data, this.rights.getCurrentWiki());
+        checkAddedPages(user, data);
         // Storing the bookmarks in display order keeps the stored data readable and the order stable.
         data.setBookmarks(getDisplayOrder(data));
         return write(user, data);
@@ -197,13 +198,32 @@ public class DefaultBookmarkManager implements BookmarkManager
         }
     }
 
-    private BookmarkEntry createBookmark(DocumentReference page, String pageReference, BookmarkData data)
-        throws BookmarkException
+    /**
+     * The data received is compared with the stored bookmarks: otherwise a page that the user cannot view could be
+     * added, and its new name learned when it is renamed. Pages already stored are kept as they are.
+     */
+    private void checkAddedPages(DocumentReference user, BookmarkData data) throws BookmarkException
     {
-        // Only additions are refused: the bookmark of a page excluded afterwards can still be removed.
-        if (this.configuration.isExcluded(page) || !this.rights.canView(page)) {
+        Set<String> storedPages =
+            read(user).getBookmarks().stream().map(BookmarkEntry::getPage).collect(Collectors.toSet());
+        for (BookmarkEntry bookmark : data.getBookmarks()) {
+            if (!storedPages.contains(bookmark.getPage())) {
+                checkCanAdd(user, this.pageResolver.resolve(bookmark.getPage()));
+            }
+        }
+    }
+
+    private void checkCanAdd(DocumentReference user, DocumentReference page) throws BookmarkAccessDeniedException
+    {
+        if (!canAdd(user, page)) {
             throw new BookmarkAccessDeniedException();
         }
+    }
+
+    private BookmarkEntry createBookmark(DocumentReference user, DocumentReference page, String pageReference,
+        BookmarkData data) throws BookmarkException
+    {
+        checkCanAdd(user, page);
         // No check of the number of bookmarks: the maximum size of the JSON, checked on writing, is always reached
         // first, and reported as such.
         BookmarkEntry bookmark = new BookmarkEntry();

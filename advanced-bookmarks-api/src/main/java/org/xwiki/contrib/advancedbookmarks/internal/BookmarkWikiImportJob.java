@@ -27,7 +27,6 @@ import org.xwiki.component.annotation.InstantiationStrategy;
 import org.xwiki.component.descriptor.ComponentInstantiationStrategy;
 import org.xwiki.contrib.advancedbookmarks.BookmarkAccessDeniedException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkException;
-import org.xwiki.contrib.advancedbookmarks.BookmarkStoreConflictException;
 import org.xwiki.job.AbstractJob;
 import org.xwiki.model.reference.DocumentReference;
 
@@ -48,8 +47,6 @@ public class BookmarkWikiImportJob extends AbstractJob<BookmarkWikiImportRequest
 {
     /** The type of this job. */
     public static final String JOB_TYPE = "advancedbookmarks.wikiImport";
-
-    private static final int MAX_ATTEMPTS = 3;
 
     @Inject
     private BookmarkWikiTransfer wikiTransfer;
@@ -91,27 +88,17 @@ public class BookmarkWikiImportJob extends AbstractJob<BookmarkWikiImportRequest
 
     private void importUser(DocumentReference user, JsonNode bookmarks, boolean replace)
     {
-        for (int attempt = 1;; attempt++) {
-            try {
-                // Converted again at each attempt, since an import modifies the data it receives.
-                this.status.addImportedUser(this.transfer.importData(user, this.jsonCodec.read(bookmarks), replace,
-                    BookmarkTransfer.ANY_VERSION));
-                return;
-            } catch (BookmarkAccessDeniedException e) {
-                // The administrator manages the bookmarks of every existing user: this one is not a user here.
-                this.logger.info("Skipped the bookmarks of [{}]: not a user of this wiki.", user);
-                this.status.addSkippedUser();
-                return;
-            } catch (BookmarkStoreConflictException e) {
-                // The user modified the bookmarks meanwhile: import into the latest ones.
-                if (attempt >= MAX_ATTEMPTS) {
-                    fail(user, e);
-                    return;
-                }
-            } catch (BookmarkException e) {
-                fail(user, e);
-                return;
-            }
+        try {
+            // The user may modify the bookmarks meanwhile: each attempt imports into the latest ones. The file data is
+            // converted again at each attempt, since an import modifies the data it receives.
+            this.status.addImportedUser(BookmarkRetries.onConflict(() -> this.transfer.importData(user,
+                this.jsonCodec.read(bookmarks), replace, BookmarkTransfer.ANY_VERSION)));
+        } catch (BookmarkAccessDeniedException e) {
+            // The administrator manages the bookmarks of every existing user: this one is not a user here.
+            this.logger.info("Skipped the bookmarks of [{}]: not a user of this wiki.", user);
+            this.status.addSkippedUser();
+        } catch (BookmarkException e) {
+            fail(user, e);
         }
     }
 

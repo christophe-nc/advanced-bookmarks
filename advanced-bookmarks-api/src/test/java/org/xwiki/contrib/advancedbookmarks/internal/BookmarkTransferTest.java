@@ -95,6 +95,7 @@ class BookmarkTransferTest
         BookmarkNormalizer normalizer = componentManager.getInstance(BookmarkNormalizer.class);
         when(this.rights.getCurrentWiki()).thenReturn(ReferenceStubs.WIKI);
         when(this.bookmarkManager.canManage(USER)).thenReturn(true);
+        when(this.bookmarkManager.canAdd(eq(USER), any())).thenReturn(true);
         when(this.configuration.getPanelLimit()).thenReturn(BookmarkConfiguration.DEFAULT_PANEL_LIMIT);
         // Like the real manager, the save normalizes the data in place.
         when(this.bookmarkManager.save(eq(USER), any())).thenAnswer(invocation -> {
@@ -136,9 +137,9 @@ class BookmarkTransferTest
     }
 
     @Test
-    void skipsExcludedPagesInBothModes() throws Exception
+    void skipsPagesThatMayNotBeAddedInBothModes() throws Exception
     {
-        when(this.configuration.isExcluded(ReferenceStubs.page("wiki:Archives.Page"))).thenReturn(true);
+        when(this.bookmarkManager.canAdd(USER, ReferenceStubs.page("wiki:Archives.Page"))).thenReturn(false);
         String json = file(data(0L, List.of(), List.of(bookmark("Archives.Page", "", 0, false),
             bookmark("Space.New", "", 1, false))));
 
@@ -153,6 +154,22 @@ class BookmarkTransferTest
         for (BookmarkData data : saved.getAllValues()) {
             assertEquals(List.of("wiki:Space.New"), data.getBookmarks().stream().map(BookmarkEntry::getPage).toList());
         }
+    }
+
+    @Test
+    void keepsAlreadyBookmarkedPagesThatCanNoLongerBeAdded() throws Exception
+    {
+        DocumentReference hidden = ReferenceStubs.page("wiki:Space.Hidden");
+        when(this.bookmarkManager.canAdd(USER, hidden)).thenReturn(false);
+        when(this.bookmarkManager.getBookmarks(USER))
+            .thenReturn(data(5L, List.of(), List.of(bookmark("wiki:Space.Hidden", "", 0, false))));
+        String json = file(data(0L, List.of(), List.of(bookmark("Space.Hidden", "", 0, false))));
+
+        assertEquals(new BookmarkTransfer.ImportResult(8L, 1, 0),
+            this.transfer.importBookmarks(USER, json, true, 5L));
+
+        assertEquals(List.of("wiki:Space.Hidden"),
+            captureSaved().getBookmarks().stream().map(BookmarkEntry::getPage).toList());
     }
 
     @Test

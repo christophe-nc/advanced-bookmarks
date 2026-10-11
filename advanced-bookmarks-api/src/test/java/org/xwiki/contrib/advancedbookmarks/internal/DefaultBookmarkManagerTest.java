@@ -115,7 +115,7 @@ class DefaultBookmarkManagerTest
     {
         when(this.rights.getCurrentWiki()).thenReturn(WIKI);
         when(this.rights.canManage(USER)).thenReturn(true);
-        when(this.rights.canView(any())).thenReturn(true);
+        when(this.rights.canView(eq(USER), any())).thenReturn(true);
         when(this.pages.exists(any())).thenReturn(true);
         when(this.pages.getPlainTitle(PAGE)).thenReturn("Page title");
         when(this.configuration.getPanelLimit()).thenReturn(BookmarkConfiguration.DEFAULT_PANEL_LIMIT);
@@ -172,11 +172,13 @@ class DefaultBookmarkManagerTest
     @Test
     void tellsWhetherAPageIsBookmarked() throws Exception
     {
-        stored(PAGE_JSON, 3L);
+        when(this.store.containsPage(WIKI, USER_KEY, PAGE_KEY)).thenReturn(true);
 
         assertTrue(this.manager.isBookmarked(USER, PAGE));
         assertFalse(this.manager.isBookmarked(USER, new DocumentReference(WIKI, "Space", "Other")));
         assertThrows(BookmarkAccessDeniedException.class, () -> this.manager.isBookmarked(PAGE, PAGE));
+        // The bookmarks themselves are not read.
+        verify(this.store, never()).get(anyString(), anyString());
     }
 
     @Test
@@ -268,7 +270,7 @@ class DefaultBookmarkManagerTest
     void refusesToBookmarkAPageTheUserCannotView() throws Exception
     {
         stored(EMPTY_JSON, 3L);
-        when(this.rights.canView(PAGE)).thenReturn(false);
+        when(this.rights.canView(USER, PAGE)).thenReturn(false);
 
         assertThrows(BookmarkAccessDeniedException.class, () -> this.manager.toggle(USER, PAGE));
 
@@ -327,6 +329,63 @@ class DefaultBookmarkManagerTest
 
         assertEquals(List.of("wiki:Space.Root", "wiki:Space.InFolder"),
             savedData().getBookmarks().stream().map(BookmarkEntry::getPage).toList());
+    }
+
+    @Test
+    void addsOnlyPagesThatAreNotExcludedAndThatTheOwnerMayView()
+    {
+        DocumentReference hidden = new DocumentReference(WIKI, "Space", "Hidden");
+        DocumentReference excluded = new DocumentReference(WIKI, "Space", "Excluded");
+        when(this.rights.canView(USER, hidden)).thenReturn(false);
+        when(this.configuration.isExcluded(excluded)).thenReturn(true);
+
+        assertTrue(this.manager.canAdd(USER, PAGE));
+        assertFalse(this.manager.canAdd(USER, hidden));
+        assertFalse(this.manager.canAdd(USER, excluded));
+    }
+
+    @Test
+    void refusesToSaveANewPageThatTheOwnerCannotView() throws Exception
+    {
+        stored(EMPTY_JSON, 3L);
+        when(this.rights.canView(USER, PAGE)).thenReturn(false);
+        BookmarkData data = new BookmarkData();
+        data.setBookmarks(List.of(bookmark("Space.Page", "Secret")));
+        data.setVersion(3L);
+
+        assertThrows(BookmarkAccessDeniedException.class, () -> this.manager.save(USER, data));
+
+        verify(this.store, never()).save(anyString(), anyString(), anyString(), anyLong());
+    }
+
+    @Test
+    void refusesToSaveANewExcludedPage() throws Exception
+    {
+        stored(EMPTY_JSON, 3L);
+        when(this.configuration.isExcluded(PAGE)).thenReturn(true);
+        BookmarkData data = new BookmarkData();
+        data.setBookmarks(List.of(bookmark("Space.Page", "Excluded")));
+        data.setVersion(3L);
+
+        assertThrows(BookmarkAccessDeniedException.class, () -> this.manager.save(USER, data));
+
+        verify(this.store, never()).save(anyString(), anyString(), anyString(), anyLong());
+    }
+
+    @Test
+    void keepsAStoredPageThatCanNoLongerBeAdded() throws Exception
+    {
+        stored(PAGE_JSON, 3L);
+        when(this.rights.canView(USER, PAGE)).thenReturn(false);
+        when(this.configuration.isExcluded(PAGE)).thenReturn(true);
+        BookmarkData data = new BookmarkData();
+        data.setBookmarks(List.of(bookmark("Space.Page", "Renamed")));
+        data.setVersion(3L);
+        when(this.store.save(eq(WIKI), eq(USER_KEY), anyString(), eq(3L))).thenReturn(4L);
+
+        assertEquals(4L, this.manager.save(USER, data));
+
+        assertEquals("Renamed", savedData().getBookmarks().get(0).getLabel());
     }
 
     @Test

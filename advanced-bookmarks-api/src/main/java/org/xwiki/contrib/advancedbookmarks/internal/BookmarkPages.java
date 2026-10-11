@@ -25,7 +25,9 @@ import javax.inject.Singleton;
 
 import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
+import org.xwiki.model.EntityType;
 import org.xwiki.model.reference.DocumentReference;
+import org.xwiki.model.reference.EntityReferenceProvider;
 import org.xwiki.rendering.syntax.Syntax;
 
 import com.xpn.xwiki.XWiki;
@@ -49,7 +51,28 @@ public class BookmarkPages
     private Provider<XWikiContext> contextProvider;
 
     @Inject
+    private EntityReferenceProvider defaultReferences;
+
+    @Inject
     private Logger logger;
+
+    /**
+     * The text displayed for a bookmark without label: the title of the page or, failing that, its name (the name of
+     * its space for a space home page, such as {@code Main.WebHome}).
+     *
+     * @param page a page
+     * @param exists whether the page exists: the title of a missing page is not computed
+     * @return the text, never empty
+     */
+    public String getDisplayTitle(DocumentReference page, boolean exists)
+    {
+        String title = exists ? getPlainTitle(page).trim() : "";
+        if (!title.isEmpty()) {
+            return title;
+        }
+        String spaceHomeName = this.defaultReferences.getDefaultReference(EntityType.DOCUMENT).getName();
+        return spaceHomeName.equals(page.getName()) ? page.getLastSpaceReference().getName() : page.getName();
+    }
 
     /**
      * @param page a page

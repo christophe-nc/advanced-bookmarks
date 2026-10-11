@@ -167,16 +167,13 @@ public class BookmarkConfiguration
         }
         List<DocumentReference> pages = new ArrayList<>();
         for (Object excluded : values) {
-            if (excluded instanceof String reference
-                && reference.length() <= BookmarkJsonCodec.MAX_PAGE_REFERENCE_LENGTH) {
+            String reference = excluded instanceof String text ? text : null;
+            if (BookmarkReferences.isValidReference(reference)) {
+                // Like any page property, a relative value is relative to the page holding it, never to the viewed
+                // page: otherwise the exclusion would change from one page to another.
+                pages.add(this.pageResolver.resolve(reference.trim(), BookmarkConfigurationSource.DOCUMENT_REFERENCE));
+            } else if (reference == null || !reference.isBlank()) {
                 // An empty value is what an empty selection may leave: it is not worth a warning.
-                if (!reference.isBlank()) {
-                    // Like any page property, a relative value is relative to the page holding it, never to the
-                    // viewed page: otherwise the exclusion would change from one page to another.
-                    pages.add(
-                        this.pageResolver.resolve(reference.trim(), BookmarkConfigurationSource.DOCUMENT_REFERENCE));
-                }
-            } else {
                 this.logger.warn("Ignoring an invalid excluded page in the Advanced Bookmarks configuration.");
             }
         }

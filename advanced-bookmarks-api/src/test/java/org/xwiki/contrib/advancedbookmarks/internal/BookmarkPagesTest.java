@@ -24,7 +24,10 @@ import javax.inject.Provider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.xwiki.model.EntityType;
 import org.xwiki.model.reference.DocumentReference;
+import org.xwiki.model.reference.EntityReference;
+import org.xwiki.model.reference.EntityReferenceProvider;
 import org.xwiki.rendering.syntax.Syntax;
 import org.xwiki.test.LogLevel;
 import org.xwiki.test.junit5.LogCaptureExtension;
@@ -40,7 +43,10 @@ import com.xpn.xwiki.doc.XWikiDocument;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -66,9 +72,14 @@ class BookmarkPagesTest
 
     private XWiki xwiki;
 
+    @MockComponent
+    private EntityReferenceProvider defaultReferences;
+
     @BeforeEach
     void setUp()
     {
+        when(this.defaultReferences.getDefaultReference(EntityType.DOCUMENT))
+            .thenReturn(new EntityReference("WebHome", EntityType.DOCUMENT));
         this.xcontext = mock(XWikiContext.class);
         this.xwiki = mock(XWiki.class);
         when(this.contextProvider.get()).thenReturn(this.xcontext);
@@ -117,6 +128,28 @@ class BookmarkPagesTest
         when(this.xwiki.getDocument(PAGE, this.xcontext)).thenReturn(document);
 
         assertEquals("Title", this.pages.getPlainTitle(PAGE));
+    }
+
+    @Test
+    void displaysTheTitleOfAnExistingPage() throws Exception
+    {
+        XWikiDocument document = mock(XWikiDocument.class);
+        when(document.getRenderedTitle(Syntax.PLAIN_1_0, this.xcontext)).thenReturn(" Title ");
+        when(this.xwiki.getDocument(PAGE, this.xcontext)).thenReturn(document);
+
+        assertEquals("Title", this.pages.getDisplayTitle(PAGE, true));
+    }
+
+    @Test
+    void displaysTheNameOfAPageWithoutTitleOrMissing() throws Exception
+    {
+        XWikiDocument document = mock(XWikiDocument.class);
+        when(document.getRenderedTitle(Syntax.PLAIN_1_0, this.xcontext)).thenReturn(" ");
+        when(this.xwiki.getDocument(PAGE, this.xcontext)).thenReturn(document);
+
+        assertEquals("Page", this.pages.getDisplayTitle(PAGE, true));
+        assertEquals("Space", this.pages.getDisplayTitle(new DocumentReference("wiki", "Space", "WebHome"), false));
+        verify(this.xwiki, times(1)).getDocument(any(DocumentReference.class), any(XWikiContext.class));
     }
 
     @Test

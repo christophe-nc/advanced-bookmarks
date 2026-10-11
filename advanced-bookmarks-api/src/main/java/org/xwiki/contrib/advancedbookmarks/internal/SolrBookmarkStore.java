@@ -21,7 +21,6 @@ package org.xwiki.contrib.advancedbookmarks.internal;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -32,6 +31,7 @@ import javax.inject.Singleton;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
+import org.apache.solr.client.solrj.request.AbstractUpdateRequest;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.client.solrj.util.ClientUtils;
@@ -39,6 +39,7 @@ import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.params.CursorMarkParams;
+import org.apache.solr.common.util.NamedList;
 import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
@@ -80,6 +81,15 @@ public class SolrBookmarkStore implements BookmarkStore
 
     private static final String DELETE_OPERATION = "delete";
 
+    private static final String READ_OPERATION = "read";
+
+    /** The update parameter asking Solr to return the versions of the written documents, under {@link #ADDS}. */
+    private static final String VERSIONS_PARAMETER = "versions";
+
+    private static final String ADDS = "adds";
+
+    private static final String INVALID_PAGE = "Invalid bookmark page reference.";
+
     private static final String INVALID_VERSION = "Invalid bookmark version.";
 
     private static final String INVALID_DOCUMENT = "The bookmark document is invalid.";
@@ -91,8 +101,6 @@ public class SolrBookmarkStore implements BookmarkStore
     private static final int QUERY_BATCH_SIZE = 500;
 
     private static final int MAX_QUERY_RESULTS = 100_000;
-
-    private static final int MAX_REPLACE_ATTEMPTS = 3;
 
     @Inject
     private Solr solr;
@@ -115,16 +123,35 @@ public class SolrBookmarkStore implements BookmarkStore
             if (documents.size() != 1) {
                 throw new BookmarkStoreException("The bookmark document is not unique.", null);
             }
+            // The JSON is not parsed here: this read runs on every page view, and its caller validates the data.
             SolrDocument document = documents.get(0);
-            String json = stringValue(document, DATA_FIELD);
-            Collection<Object> values = document.getFieldValues(PAGES_FIELD);
-            Set<Object> storedPages = values == null ? Set.of() : Set.copyOf(values);
-            if (!storedPages.equals(getStoredPageReferences(json))) {
-                throw new BookmarkStoreException("The bookmark document is inconsistent.", null);
-            }
-            return Optional.of(new BookmarkRecord(json, numberValue(document, VERSION_FIELD)));
+            return Optional.of(
+                new BookmarkRecord(stringValue(document, DATA_FIELD), numberValue(document, VERSION_FIELD)));
         } catch (SolrException | SolrServerException | IOException e) {
-            throw storageFailure("read", e);
+            throw storageFailure(READ_OPERATION, e);
+        }
+    }
+
+    @Override
+    public boolean containsPage(String wiki, String user, String page) throws BookmarkStoreException
+    {
+        validateIdentity(wiki, user);
+        if (page == null || page.isBlank()) {
+            throw new BookmarkStoreException(INVALID_PAGE, null);
+        }
+        if (!BookmarkReferences.isValidReference(page)) {
+            // Such a reference is too long to be stored.
+            return false;
+        }
+        try {
+            // The indexed page references answer without reading nor parsing the JSON of the bookmarks.
+            SolrQuery query = new SolrQuery(ALL_DOCUMENTS);
+            query.addFilterQuery(filter(ID_FIELD, documentId(wiki, user)));
+            query.addFilterQuery(filter(PAGES_FIELD, page));
+            query.setRows(0);
+            return getSolrClient().query(query).getResults().getNumFound() > 0;
+        } catch (SolrException | SolrServerException | IOException | org.apache.solr.common.SolrException e) {
+            throw storageFailure(READ_OPERATION, e);
         }
     }
 
@@ -144,37 +171,27 @@ public class SolrBookmarkStore implements BookmarkStore
         document.addField(VERSION_FIELD, toSolrVersion(expectedVersion));
 
         try {
-            SolrClient client = getSolrClient();
-            client.add(document);
-            client.commit();
-            SolrDocumentList saved = queryById(client, wiki, user);
-            if (saved.size() != 1) {
-                throw new BookmarkStoreException("The saved bookmark document could not be verified.", null);
-            }
-            if (!json.equals(stringValue(saved.get(0), DATA_FIELD))) {
-                throw new BookmarkStoreConflictException(null);
-            }
-            return numberValue(saved.get(0), VERSION_FIELD);
+            UpdateRequest request = new UpdateRequest();
+            request.add(document);
+            // Solr returns the version it assigned to the document. Reading the document back instead would report a
+            // successful write as a conflict whenever another write follows it before the read.
+            request.setParam(VERSIONS_PARAMETER, Boolean.TRUE.toString());
+            // Committed in the same request, so that the next reads see the new bookmarks.
+            request.setAction(AbstractUpdateRequest.ACTION.COMMIT, true, true);
+            return getSavedVersion(request.process(getSolrClient()).getResponse());
         } catch (SolrException | SolrServerException | IOException | org.apache.solr.common.SolrException e) {
             throw updateFailure("write", e);
         }
     }
 
-    @Override
-    public void delete(String wiki, String user, long expectedVersion)
-        throws BookmarkStoreConflictException, BookmarkStoreException
+    private static long getSavedVersion(NamedList<Object> body) throws BookmarkStoreException
     {
-        validateIdentity(wiki, user);
-        validateVersion(expectedVersion);
-        try {
-            SolrClient client = getSolrClient();
-            UpdateRequest request = new UpdateRequest();
-            request.deleteById(documentId(wiki, user), toSolrVersion(expectedVersion));
-            request.process(client);
-            client.commit();
-        } catch (SolrException | SolrServerException | IOException | org.apache.solr.common.SolrException e) {
-            throw updateFailure(DELETE_OPERATION, e);
+        Object adds = body != null ? body.get(ADDS) : null;
+        if (adds instanceof NamedList<?> versions && versions.size() == 1
+            && versions.getVal(0) instanceof Number version) {
+            return version.longValue();
         }
+        throw new BookmarkStoreException("Solr did not return the version of the saved bookmark document.", null);
     }
 
     @Override
@@ -203,20 +220,35 @@ public class SolrBookmarkStore implements BookmarkStore
         }
 
         int updated = 0;
+        BookmarkStoreException failure = null;
         for (String user : findUsersByPage(wiki, oldPage)) {
-            if (replacePage(wiki, user, oldPage, newPage)) {
-                updated++;
+            try {
+                if (replacePage(wiki, user, oldPage, newPage)) {
+                    updated++;
+                }
+            } catch (BookmarkStoreException e) {
+                // One user whose bookmarks cannot be updated must not prevent the update of the others.
+                this.logger.warn("Unable to update the bookmarks of [{}] after a page rename: {}", user,
+                    e.getMessage());
+                failure = addFailure(failure, e);
             }
+        }
+        if (failure != null) {
+            throw failure;
         }
         return updated;
     }
 
-    @Override
-    public List<String> findUsersByPage(String wiki, String page) throws BookmarkStoreException
+    /**
+     * The first failure is reported, so that its type (such as a conflict) is kept; the next ones are attached to it.
+     */
+    private static BookmarkStoreException addFailure(BookmarkStoreException first, BookmarkStoreException next)
     {
-        validateWiki(wiki);
-        validatePage(page);
-        return queryUsers(wiki, PAGES_FIELD, page);
+        if (first == null) {
+            return next;
+        }
+        first.addSuppressed(next);
+        return first;
     }
 
     @Override
@@ -250,23 +282,24 @@ public class SolrBookmarkStore implements BookmarkStore
     private boolean replacePage(String wiki, String user, String oldPage, String newPage)
         throws BookmarkStoreException
     {
-        for (int attempt = 1;; attempt++) {
+        return BookmarkRetries.onConflict(() -> {
             Optional<BookmarkRecord> current = get(wiki, user);
             if (current.isEmpty() || !getStoredPageReferences(current.get().json()).contains(oldPage)) {
                 // The page was removed from these bookmarks meanwhile: nothing left to replace.
                 return false;
             }
             String updatedJson = this.jsonCodec.replacePage(current.get().json(), oldPage, newPage);
-            try {
-                save(wiki, user, updatedJson, current.get().version());
-                return true;
-            } catch (BookmarkStoreConflictException e) {
-                if (attempt >= MAX_REPLACE_ATTEMPTS) {
-                    throw e;
-                }
-                this.logger.debug("Retrying a bookmark page replacement after a version conflict.");
-            }
-        }
+            save(wiki, user, updatedJson, current.get().version());
+            return true;
+        });
+    }
+
+    /**
+     * The wiki and the page are validated by the caller.
+     */
+    private List<String> findUsersByPage(String wiki, String page) throws BookmarkStoreException
+    {
+        return queryUsers(wiki, PAGES_FIELD, page);
     }
 
     private void deleteByFilter(String field, String value) throws BookmarkStoreException
@@ -338,7 +371,7 @@ public class SolrBookmarkStore implements BookmarkStore
     {
         SolrQuery query = new SolrQuery(ALL_DOCUMENTS);
         query.addFilterQuery(filter(ID_FIELD, documentId(wiki, user)));
-        query.setFields(DATA_FIELD, VERSION_FIELD, PAGES_FIELD);
+        query.setFields(DATA_FIELD, VERSION_FIELD);
         query.setRows(2);
         return client.query(query).getResults();
     }
@@ -438,22 +471,22 @@ public class SolrBookmarkStore implements BookmarkStore
 
     private static void validateUser(String user) throws BookmarkStoreException
     {
-        if (user == null || user.isBlank() || user.length() > MAX_IDENTITY_LENGTH) {
+        if (!BookmarkReferences.isValidText(user, MAX_IDENTITY_LENGTH)) {
             throw new BookmarkStoreException("Invalid bookmark user reference.", null);
         }
     }
 
     private static void validateWiki(String wiki) throws BookmarkStoreException
     {
-        if (wiki == null || wiki.isBlank() || wiki.length() > MAX_IDENTITY_LENGTH) {
+        if (!BookmarkReferences.isValidText(wiki, MAX_IDENTITY_LENGTH)) {
             throw new BookmarkStoreException("Invalid wiki identifier.", null);
         }
     }
 
     private static void validatePage(String page) throws BookmarkStoreException
     {
-        if (page == null || page.isBlank() || page.length() > BookmarkJsonCodec.MAX_PAGE_REFERENCE_LENGTH) {
-            throw new BookmarkStoreException("Invalid bookmark page reference.", null);
+        if (!BookmarkReferences.isValidReference(page)) {
+            throw new BookmarkStoreException(INVALID_PAGE, null);
         }
     }
 }

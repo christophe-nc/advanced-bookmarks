@@ -47,10 +47,12 @@ import org.xwiki.job.event.status.JobStatus;
 public class BookmarkWikiImports
 {
     /**
-     * The context entries given to the job, so that it runs in the current wiki with the rights of the current user.
-     * Their names are those of the XWiki context store.
+     * The context entries given to the job, so that it runs in the current wiki with the rights of the current user
+     * and of the author of the code that started it: administrators' rights require both (see
+     * {@link BookmarkRights#isAdmin()}), and the job thread would otherwise have an unrelated author. Their names are
+     * those of the XWiki context store.
      */
-    private static final List<String> CONTEXT_ENTRIES = List.of("wiki", "user", "locale");
+    private static final List<String> CONTEXT_ENTRIES = List.of("wiki", "user", "author", "locale");
 
     @Inject
     private BookmarkWikiTransfer wikiTransfer;
@@ -78,13 +80,11 @@ public class BookmarkWikiImports
      * @throws BookmarkStoreConflictException if an import of the current wiki is already running
      * @throws BookmarkException if the import cannot be started
      */
-    public synchronized int start(byte[] content, boolean replace) throws BookmarkException
+    public int start(byte[] content, boolean replace) throws BookmarkException
     {
         // Validated before starting, so that an invalid file is reported at once and nothing is imported from it.
+        // Reading a large file takes time: it is done outside of the lock, which would delay the other imports.
         int userCount = this.wikiTransfer.validate(content);
-        if (isRunning(getStatus())) {
-            throw new BookmarkStoreConflictException(null);
-        }
         BookmarkWikiImportRequest request = new BookmarkWikiImportRequest();
         request.setId(getJobId());
         request.setContent(content);
@@ -94,13 +94,24 @@ public class BookmarkWikiImports
         request.setStatusSerialized(false);
         // The log of the job also goes to the server log, where administrators look for failures.
         request.setStatusLogIsolated(false);
+        execute(request);
+        return userCount;
+    }
+
+    /**
+     * Synchronized so that two imports of the same wiki cannot both find that none is running.
+     */
+    private synchronized void execute(BookmarkWikiImportRequest request) throws BookmarkException
+    {
+        if (isRunning(getStatus())) {
+            throw new BookmarkStoreConflictException(null);
+        }
         try {
             request.setContext(this.contextStore.save(CONTEXT_ENTRIES));
             this.jobExecutor.execute(BookmarkWikiImportJob.JOB_TYPE, request);
         } catch (ComponentLookupException | JobException e) {
             throw new BookmarkException("Unable to start the import of bookmarks.", e);
         }
-        return userCount;
     }
 
     /**

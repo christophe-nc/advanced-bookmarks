@@ -41,6 +41,16 @@ public interface BookmarkManager
     boolean canManage(DocumentReference user);
 
     /**
+     * A page may be added to the bookmarks of a user if it is not excluded by the wiki and the user may view it. Pages
+     * already bookmarked are not concerned: they are kept even once excluded or hidden, and can still be removed.
+     *
+     * @param user the owner of the bookmarks
+     * @param page a page of the current wiki
+     * @return {@code true} if the page may be added to the bookmarks of the user
+     */
+    boolean canAdd(DocumentReference user, DocumentReference page);
+
+    /**
      * @param user the owner of the bookmarks
      * @return the normalized bookmarks of the user, empty with version {@code 0} if none are stored
      * @throws BookmarkAccessDeniedException if the current user may not manage these bookmarks
@@ -64,7 +74,8 @@ public interface BookmarkManager
      * @param user the owner of the bookmarks
      * @param page a page
      * @return {@code true} if the page is bookmarked after the operation
-     * @throws BookmarkAccessDeniedException if the current user may not manage these bookmarks
+     * @throws BookmarkAccessDeniedException if the current user may not manage these bookmarks, or if the page is not
+     *             bookmarked and may not be added (see {@link #canAdd})
      * @throws BookmarkStoreConflictException if the bookmarks keep being modified concurrently
      * @throws BookmarkStoreException if the bookmarks cannot be read or written
      */
@@ -77,10 +88,11 @@ public interface BookmarkManager
      * @param user the owner of the bookmarks
      * @param data the new folders and bookmarks, with the version they were read at
      * @return the new version
-     * @throws BookmarkAccessDeniedException if the current user may not manage these bookmarks
+     * @throws BookmarkAccessDeniedException if the current user may not manage these bookmarks, or if the data adds
+     *             a page that may not be added (see {@link #canAdd})
      * @throws BookmarkInvalidDataException if the data exceeds the supported limits
      * @throws BookmarkStoreConflictException if the bookmarks were modified since they were read
-     * @throws BookmarkStoreException if the bookmarks cannot be written
+     * @throws BookmarkStoreException if the bookmarks cannot be read or written
      */
     long save(DocumentReference user, BookmarkData data) throws BookmarkException;
 

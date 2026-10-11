@@ -95,9 +95,6 @@ public class BookmarkTransfer
     private BookmarkRights rights;
 
     @Inject
-    private BookmarkConfiguration configuration;
-
-    @Inject
     @Named("current")
     private DocumentReferenceResolver<String> resolver;
 
@@ -111,7 +108,7 @@ public class BookmarkTransfer
      * @param version the new storage version of the bookmarks
      * @param imported the number of bookmarks added by the import
      * @param skipped the number of bookmarks of the file that were not added: already bookmarked, invalid, of
-     *            another wiki or of an excluded page
+     *            another wiki, of an excluded page or of a page the owner cannot view
      */
     public record ImportResult(long version, int imported, int skipped)
     {
@@ -203,9 +200,12 @@ public class BookmarkTransfer
         // Normalized first, so that pages are compared under their canonical reference in the current wiki, and so
         // that the imported folders form a valid tree.
         this.normalizer.normalize(imported, this.rights.getCurrentWiki());
-        // Like the star, an import may not add excluded pages; they are counted as skipped.
-        imported.getBookmarks()
-            .removeIf(bookmark -> this.configuration.isExcluded(this.resolver.resolve(bookmark.getPage())));
+        // Like the star, an import may only add pages that may be added: excluded pages and pages the owner cannot
+        // view are counted as skipped. Pages already bookmarked are kept, as when the bookmarks are saved.
+        Set<String> currentPages =
+            current.getBookmarks().stream().map(BookmarkEntry::getPage).collect(Collectors.toSet());
+        imported.getBookmarks().removeIf(bookmark -> !currentPages.contains(bookmark.getPage())
+            && !this.bookmarkManager.canAdd(user, this.resolver.resolve(bookmark.getPage())));
         int keptCount = 0;
         BookmarkData result = imported;
         if (!replace) {

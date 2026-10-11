@@ -102,6 +102,8 @@ class TransferIT
         BookmarkService.Response status = adminService.getWikiImportStatus();
         assertEquals(Boolean.FALSE, status.get("failed"));
         assertEquals(0L, status.get("failedUsers"));
+        // The job runs with the rights of the administrator who started it: no user of the file may be refused.
+        assertEquals(0L, status.get("skippedUsers"));
         assertEquals(pages, adminService.getBookmarks("XWiki." + USER).getPages());
     }
 

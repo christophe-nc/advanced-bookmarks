@@ -64,8 +64,7 @@ public class BookmarkReferences
         if (StringUtils.isBlank(user)) {
             return this.rights.getCurrentUser();
         }
-        checkLength(user);
-        return this.resolver.resolve(user, USER_SPACE);
+        return this.resolver.resolve(checkReference(user), USER_SPACE);
     }
 
     /**
@@ -75,17 +74,36 @@ public class BookmarkReferences
      */
     public DocumentReference resolvePage(String page) throws BookmarkInvalidDataException
     {
-        if (StringUtils.isBlank(page)) {
-            throw new BookmarkInvalidDataException(null);
-        }
-        checkLength(page);
-        return this.resolver.resolve(page);
+        return this.resolver.resolve(checkReference(page));
     }
 
-    private static void checkLength(String reference) throws BookmarkInvalidDataException
+    /**
+     * The single check of the texts received from users, files and the storage, which the callers report each in
+     * their own way.
+     *
+     * @param text a text, possibly {@code null}
+     * @param maxLength the maximum length of the text
+     * @return {@code true} if the text is neither {@code null} nor blank, and not longer than the maximum length
+     */
+    public static boolean isValidText(String text, int maxLength)
     {
-        if (reference.length() > BookmarkJsonCodec.MAX_PAGE_REFERENCE_LENGTH) {
+        return text != null && !text.isBlank() && text.length() <= maxLength;
+    }
+
+    /**
+     * @param reference a user or page reference, possibly {@code null}
+     * @return {@code true} if the reference is neither {@code null} nor blank, and short enough to be stored
+     */
+    public static boolean isValidReference(String reference)
+    {
+        return isValidText(reference, BookmarkJsonCodec.MAX_PAGE_REFERENCE_LENGTH);
+    }
+
+    private static String checkReference(String reference) throws BookmarkInvalidDataException
+    {
+        if (!isValidReference(reference)) {
             throw new BookmarkInvalidDataException(null);
         }
+        return reference;
     }
 }

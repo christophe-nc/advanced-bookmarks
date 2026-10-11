@@ -247,8 +247,13 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
       }
       return names.join(' / ');
     };
+    // The reference of a page the current user cannot view is never displayed. Without label, the server gives the
+    // title of the page, or its name; the reference is only a fallback for a label cleared before the next load.
+    var getVisiblePage = function(bookmark) {
+      return bookmark.viewable ? bookmark.page : '';
+    };
     var getText = function(bookmark) {
-      return bookmark.label || bookmark.page;
+      return bookmark.label || bookmark.title || getVisiblePage(bookmark);
     };
     var countPanelBookmarks = function() {
       return state.bookmarks.filter(function(bookmark) { return bookmark.panel; }).length;
@@ -329,7 +334,8 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
             panel: !!bookmark.panel,
             viewable: !!bookmark.viewable,
             exists: bookmark.exists !== false,
-            url: bookmark.url
+            url: bookmark.url,
+            title: bookmark.title || ''
           };
         });
         state.version = String(data.version || '0');
@@ -510,7 +516,7 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
           text: text});
       } else {
         link = createElement('span', {className: 'advanced-bookmarks-link advanced-bookmarks-link-unavailable',
-          title: bookmark.page}, [
+          title: getVisiblePage(bookmark) || null}, [
           text, ' ',
           createElement('span', {className: 'advanced-bookmarks-badge',
             text: bookmark.viewable ? t('deleted') : t('inaccessible')})
@@ -623,7 +629,7 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
       var search = normalizeForSearch(filterInput.value.trim());
       if (search) {
         var results = getDisplayOrder().filter(function(bookmark) {
-          return normalizeForSearch(getText(bookmark) + ' ' + bookmark.page + ' ' + getPath(bookmark.folder))
+          return normalizeForSearch([getText(bookmark), getVisiblePage(bookmark), getPath(bookmark.folder)].join(' '))
             .indexOf(search) >= 0;
         });
         if (!results.length) {
@@ -897,7 +903,7 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
         return shift(getBookmarksOf(target.bookmark.folder), target.bookmark, 1);
       },
       remove: function(target) {
-        if (window.confirm(t('confirmRemove', getText(target.bookmark)))) {
+        if (window.confirm(t('confirmRemove', getText(target.bookmark) || t('inaccessible')))) {
           removeBookmark(target.bookmark);
           return true;
         }

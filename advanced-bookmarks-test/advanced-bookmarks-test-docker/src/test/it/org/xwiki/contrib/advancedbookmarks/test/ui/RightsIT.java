@@ -57,13 +57,24 @@ class RightsIT
         DocumentReference page = new DocumentReference(setup.getCurrentWiki(), "RightsIT", "Page");
         String pageReference = setup.getCurrentWiki() + ":RightsIT.Page";
         String owner = setup.getCurrentWiki() + ":XWiki." + OWNER;
+        DocumentReference hiddenPage = new DocumentReference(setup.getCurrentWiki(), "RightsIT", "Hidden");
         AdminActions.loginAsAdmin(setup);
         setup.createPage(page, "", "Rights page");
+        setup.createPage(hiddenPage, "", "Hidden page");
+        setup.setRights(hiddenPage, "", "XWiki." + OWNER, "view", false);
 
         // The owner sees their bookmarks in their profile tab.
         setup.createUserAndLogin(OWNER, OWNER_PASSWORD);
         setup.gotoPage(page);
-        assertEquals(BookmarkService.OK, new BookmarkService(setup).toggle(pageReference).status());
+        BookmarkService ownerService = new BookmarkService(setup);
+        assertEquals(BookmarkService.OK, ownerService.toggle(pageReference).status());
+
+        // A page the owner cannot view cannot be added, not even by saving the bookmarks directly.
+        String version = (String) ownerService.getBookmarks("").get("version");
+        BookmarkService.Response hiddenAdded = ownerService.save("", "{\"folders\":[],\"bookmarks\":[{\"page\":\""
+            + pageReference + "\"},{\"page\":\"" + setup.getCurrentWiki() + ":RightsIT.Hidden\"}]}", version);
+        assertEquals(403, hiddenAdded.status());
+        assertEquals("forbidden", hiddenAdded.get("error"));
         setup.gotoPage("XWiki", OWNER, "view", "category=bookmarks");
         assertFalse(setup.getDriver().findElementsWithoutWaiting(PROFILE_TAB).isEmpty());
         assertEquals(owner, new BookmarksManager().waitUntilLoaded().getUser());

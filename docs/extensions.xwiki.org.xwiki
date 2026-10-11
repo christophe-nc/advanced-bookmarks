@@ -19,9 +19,6 @@ Personal bookmarks for XWiki users, stored with their account rather than in the
 * **Administrator help**: administrators can open and manage the bookmarks of any user of their wiki, for support.
 * English and French translations.
 
-[[image:star.png||alt="Star in the action bar of a page"]]
-[[image:panel.png||alt="Bookmarks panel"]]
-
 = Prerequisites =
 
 * XWiki 18.0.0 or later, running on Java 21.
@@ -32,7 +29,7 @@ Personal bookmarks for XWiki users, stored with their account rather than in the
 Install the **Advanced Bookmarks** extension ({{{org.xwiki.contrib.advancedbookmarks:advanced-bookmarks-ui}}}) with the Extension Manager. Its Java part, {{{advanced-bookmarks-api}}}, is installed automatically.
 
 * **Farm level**: the Java part can only be installed on the whole farm. The Solr core it creates is shared by all the wikis of the farm, and XWiki creates Solr cores from the components installed at farm level. Installing an extension on the whole farm requires programming rights.
-* **Installing user**: install as an administrator of the wiki. The star is only displayed when the author of its UI extension has the administration right.
+* **Installing user**: install as an administrator of the wiki. The star is only displayed when the author of its UI extension has the administration right, and the features reserved to administrators (managing the bookmarks of other users, administration tools) also require that the author of the page running them administers the wiki. If the installing account later loses this right, reinstall the extension, or save its pages again, as an administrator.
 * **Panel**: the panel is not added to the page layout automatically. Add {{{Panels.MyBookmarks}}} in //Administration > Look & Feel > Panels//.
 * **Upgrades**: upgrading replaces a farm-level JAR, after which XWiki reloads the other farm-level JAR extensions. Some of them may log warnings or errors during this reload, and an extension whose components fail to reload stays partly inactive until XWiki is restarted. Plan upgrades with a restart of XWiki.
 
@@ -44,9 +41,13 @@ Before the first installation, back up the permanent directory of XWiki: the ext
 
 Logged-in users see a star in the action bar of each page. Clicking it adds the page to the //Uncategorized// bookmarks, or removes it. The star is not displayed on excluded pages (see [[Configuration>>||anchor="HConfiguration"]]), nor on the pages of the extension itself.
 
+[[image:star.png||alt="Star in the action bar of a page"]]
+
 == Panel ==
 
 The panel displays the bookmarks selected with the //Panel// box of the management page, up to the configured panel size (10 by default). Without any selection, it displays the first bookmarks, in the order of the management page. Deleted pages are struck through; pages the user cannot view are shown without a link.
+
+[[image:panel.png||alt="Bookmarks panel"]]
 
 == Management page ==
 
@@ -81,7 +82,7 @@ The //Export// button of the management page downloads the bookmarks as a JSON f
 * **adds it** to the current bookmarks: an imported folder is merged with the folder of the same name (ignoring case) at the same place, other folders are created, imported items come after the existing ones of their folder, and pages already bookmarked are skipped. Importing an export of the same bookmarks changes nothing;
 * or **replaces** the current bookmarks with the content of the file.
 
-Page references are exported without their wiki, so a file can be imported into another wiki or farm. Pages of another wiki and excluded pages found in a file are skipped.
+Page references are exported without their wiki, so a file can be imported into another wiki or farm. Pages of another wiki, excluded pages and pages the user cannot view found in a file are skipped.
 
 The export file has this format:
 
@@ -128,7 +129,7 @@ Local users are written without their wiki, so that the file can be imported int
 Bookmarks are private, and kept separately for each wiki of a farm. All the checks are made on the server:
 
 * the current user and wiki always come from the XWiki context, never from the browser;
-* users read and modify only their own bookmarks; the administrators of a wiki can also manage the bookmarks of any existing user of that wiki;
+* users read and modify only their own bookmarks; the administrators of a wiki can also manage the bookmarks of any existing user of that wiki, provided the page running the operation was also written by an administrator, so that a script written by someone else cannot use the rights of an administrator viewing it;
 * guests have no bookmarks;
 * a page can only be bookmarked by a user who can view it, and live information about a bookmarked page (whether it exists, its URL) is only given to users who can view it;
 * modifications are only accepted in POST requests carrying a valid CSRF token.
@@ -175,7 +176,7 @@ The export of the administration tools also gives a copy of the bookmarks of a w
 |{{{isBookmarked(page)}}}|Whether the current user bookmarked a page ({{{bookmarked}}}), and whether the page may be bookmarked ({{{bookmarkable}}}, {{{false}}} for an excluded page).
 |{{{isStarEnabled()}}}|Whether the current wiki displays the star (a plain boolean).
 |{{{toggle(page)}}}|Add the page to the uncategorized bookmarks of the current user, or remove it. Adding an excluded page is refused ({{{forbidden}}}). Write operation.
-|{{{save(user, json, version)}}}|Replace all the bookmarks of a user, provided they were not modified since {{{version}}} was read; {{{conflict}}} otherwise. Returns the new {{{version}}} and the space used ({{{size}}}). Write operation.
+|{{{save(user, json, version)}}}|Replace all the bookmarks of a user, provided they were not modified since {{{version}}} was read; {{{conflict}}} otherwise. Adding a page that is excluded or that the user cannot view is refused ({{{forbidden}}}); pages already bookmarked are kept. Returns the new {{{version}}} and the space used ({{{size}}}). Write operation.
 |{{{exportBookmarks(user)}}}|Export file of the bookmarks of a user, as a JSON string under the {{{content}}} key.
 |{{{importBookmarks(user, json, mode, version)}}}|Import an export file in the {{{merge}}} or {{{replace}}} mode, provided the bookmarks were not modified since {{{version}}} was read. Returns the new {{{version}}} and the number of bookmarks {{{imported}}} and {{{skipped}}}. Write operation.
 

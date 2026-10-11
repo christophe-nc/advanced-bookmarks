@@ -86,13 +86,28 @@ public class BookmarkRights
     }
 
     /**
-     * @return {@code true} if the current user administers the current wiki
+     * The author of the running code must administer the wiki too: otherwise the script of a page written by anyone
+     * could use the rights of an administrator viewing that page, to read the bookmarks of others and leak them.
+     * Without any current page, XWiki takes the current user as the author; a background job must be given the author
+     * of the code that started it (see {@link BookmarkWikiImports}).
+     *
+     * @return {@code true} if the current user and the author of the running code administer the current wiki
      */
     public boolean isAdmin()
     {
-        DocumentReference currentUser = getCurrentUser();
-        return currentUser != null
-            && this.authorizationManager.hasAccess(Right.ADMIN, currentUser, new WikiReference(getCurrentWiki()));
+        XWikiContext xcontext = this.contextProvider.get();
+        DocumentReference currentUser = xcontext.getUserReference();
+        DocumentReference author = xcontext.getAuthorReference();
+        WikiReference wiki = new WikiReference(xcontext.getWikiId());
+        return administers(currentUser, wiki) && (currentUser.equals(author) || administers(author, wiki));
+    }
+
+    /**
+     * @return {@code false} for a guest, whose rights are never those of an administrator
+     */
+    private boolean administers(DocumentReference user, WikiReference wiki)
+    {
+        return user != null && this.authorizationManager.hasAccess(Right.ADMIN, user, wiki);
     }
 
     /**
@@ -101,7 +116,17 @@ public class BookmarkRights
      */
     public boolean canView(DocumentReference page)
     {
-        return this.authorizationManager.hasAccess(Right.VIEW, getCurrentUser(), page);
+        return canView(getCurrentUser(), page);
+    }
+
+    /**
+     * @param user a user, {@code null} for a guest
+     * @param page a page
+     * @return {@code true} if the user may view this page
+     */
+    public boolean canView(DocumentReference user, DocumentReference page)
+    {
+        return this.authorizationManager.hasAccess(Right.VIEW, user, page);
     }
 
     private boolean isExistingUser(DocumentReference user)

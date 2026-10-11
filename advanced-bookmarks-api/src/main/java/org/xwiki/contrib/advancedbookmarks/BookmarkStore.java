@@ -44,6 +44,17 @@ public interface BookmarkStore
     Optional<BookmarkRecord> get(String wiki, String user) throws BookmarkStoreException;
 
     /**
+     * Tell whether a page is among a user's bookmarks, without reading them: this check runs on every page view.
+     *
+     * @param wiki the wiki identifier
+     * @param user the serialized user reference
+     * @param page the serialized page reference, as stored
+     * @return {@code true} if the bookmarks of the user include the page
+     * @throws BookmarkStoreException if the storage cannot be queried, or the references are invalid
+     */
+    boolean containsPage(String wiki, String user, String page) throws BookmarkStoreException;
+
+    /**
      * Save bookmark JSON only if its version has not changed since it was read.
      *
      * @param wiki the wiki identifier
@@ -58,19 +69,8 @@ public interface BookmarkStore
         throws BookmarkStoreConflictException, BookmarkStoreException;
 
     /**
-     * Delete a user's bookmark document if its version matches.
-     *
-     * @param wiki the wiki identifier
-     * @param user the serialized user reference
-     * @param expectedVersion the version previously read, or {@code 0} if no document existed
-     * @throws BookmarkStoreConflictException if the document was concurrently changed
-     * @throws BookmarkStoreException if the storage cannot be updated
-     */
-    void delete(String wiki, String user, long expectedVersion)
-        throws BookmarkStoreConflictException, BookmarkStoreException;
-
-    /**
-     * Replace a page reference in all matching users' bookmarks.
+     * Replace a page reference in all matching users' bookmarks. A user whose bookmarks cannot be updated does not
+     * prevent the update of the others: the failure is reported once all the users have been processed.
      *
      * @param wiki the wiki identifier
      * @param oldPage the previous serialized page reference
@@ -81,16 +81,6 @@ public interface BookmarkStore
      */
     int replacePage(String wiki, String oldPage, String newPage)
         throws BookmarkStoreConflictException, BookmarkStoreException;
-
-    /**
-     * Find users who have bookmarked a page in the specified wiki.
-     *
-     * @param wiki the wiki identifier
-     * @param page the serialized page reference
-     * @return matching serialized user references, in case-insensitive alphabetical order
-     * @throws BookmarkStoreException if the storage cannot be queried
-     */
-    List<String> findUsersByPage(String wiki, String page) throws BookmarkStoreException;
 
     /**
      * List users with stored bookmarks in the specified wiki.

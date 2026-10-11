@@ -27,6 +27,7 @@ import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import org.apache.commons.lang3.StringUtils;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.contrib.advancedbookmarks.BookmarkEntry;
 import org.xwiki.contrib.advancedbookmarks.BookmarkFolder;
@@ -66,11 +67,14 @@ public class BookmarkViews
 
     /**
      * The page and label are the owner's own data and are always returned, so that saving what was read loses
-     * nothing. Live information about the page is only returned if the current user may view it.
+     * nothing. Live information about the page is only returned if the current user may view it; the page reference
+     * must then not be displayed either.
      *
      * @param bookmarks bookmarks
      * @return a map per bookmark, with the {@code page}, {@code label}, {@code folder}, {@code order}, {@code panel}
-     *         and {@code viewable} keys and, when the current user may view the page, {@code exists} and {@code url}
+     *         and {@code viewable} keys and, when the current user may view the page, {@code exists} and {@code url};
+     *         for a bookmark without label of a page the current user may view, the text to display instead under the
+     *         {@code title} key (see {@link BookmarkPages#getDisplayTitle})
      */
     public List<Map<String, Object>> getBookmarks(List<BookmarkEntry> bookmarks)
     {
@@ -89,8 +93,13 @@ public class BookmarkViews
         boolean viewable = this.rights.canView(page);
         map.put("viewable", viewable);
         if (viewable) {
-            map.put("exists", this.pages.exists(page));
+            boolean exists = this.pages.exists(page);
+            map.put("exists", exists);
             map.put("url", this.pages.getURL(page));
+            // Only computed when needed: the title of a page may be costly to render.
+            if (StringUtils.isBlank(bookmark.getLabel())) {
+                map.put("title", this.pages.getDisplayTitle(page, exists));
+            }
         }
         return map;
     }

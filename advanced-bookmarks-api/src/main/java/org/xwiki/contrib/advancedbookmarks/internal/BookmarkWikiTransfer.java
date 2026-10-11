@@ -282,8 +282,8 @@ public class BookmarkWikiTransfer
 
     private DocumentReference resolveUser(JsonNode user) throws BookmarkInvalidDataException
     {
-        if (user == null || !user.isTextual() || user.textValue().isBlank()
-            || user.textValue().length() > BookmarkJsonCodec.MAX_PAGE_REFERENCE_LENGTH) {
+        // The text value of a node that is not a string is null, hence invalid.
+        if (user == null || !BookmarkReferences.isValidReference(user.textValue())) {
             throw new BookmarkInvalidDataException(null);
         }
         return this.resolver.resolve(user.textValue());

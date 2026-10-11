@@ -185,8 +185,7 @@ public class BookmarkNormalizer
      */
     private String normalizePage(BookmarkEntry bookmark, String wiki)
     {
-        if (bookmark == null || bookmark.getPage() == null || bookmark.getPage().isBlank()
-            || bookmark.getPage().length() > BookmarkJsonCodec.MAX_PAGE_REFERENCE_LENGTH) {
+        if (bookmark == null || !BookmarkReferences.isValidReference(bookmark.getPage())) {
             return null;
         }
         DocumentReference reference = this.pageResolver.resolve(bookmark.getPage());
@@ -195,6 +194,7 @@ public class BookmarkNormalizer
             return null;
         }
         String page = serialize(reference);
-        return page.length() > BookmarkJsonCodec.MAX_PAGE_REFERENCE_LENGTH ? null : page;
+        // The canonical reference, with its wiki, may be longer than the reference received.
+        return BookmarkReferences.isValidReference(page) ? page : null;
     }
 }

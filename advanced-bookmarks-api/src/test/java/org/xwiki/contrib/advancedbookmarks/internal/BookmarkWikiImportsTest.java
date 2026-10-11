@@ -20,8 +20,14 @@
 package org.xwiki.contrib.advancedbookmarks.internal;
 
 import java.io.Serializable;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +53,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -66,6 +73,8 @@ class BookmarkWikiImportsTest
     private static final List<String> JOB_ID = List.of("advancedbookmarks", "import", ReferenceStubs.WIKI);
 
     private static final byte[] CONTENT = { 1, 2 };
+
+    private static final long TIMEOUT_SECONDS = 10;
 
     @InjectMockComponents
     private BookmarkWikiImports imports;
@@ -92,7 +101,7 @@ class BookmarkWikiImportsTest
     {
         when(this.rights.getCurrentWiki()).thenReturn(ReferenceStubs.WIKI);
         when(this.wikiTransfer.validate(CONTENT)).thenReturn(2);
-        when(this.contextStore.save(List.of("wiki", "user", "locale"))).thenReturn(this.context);
+        when(this.contextStore.save(List.of("wiki", "user", "author", "locale"))).thenReturn(this.context);
     }
 
     @Test
@@ -135,6 +144,33 @@ class BookmarkWikiImportsTest
         when(status.getState()).thenReturn(JobStatus.State.FINISHED);
         assertEquals(2, this.imports.start(CONTENT, false));
         verify(this.jobExecutor).execute(eq(BookmarkWikiImportJob.JOB_TYPE), any());
+    }
+
+    @Test
+    void validatesAFileWithoutDelayingTheOtherImports() throws Exception
+    {
+        byte[] largeContent = { 3 };
+        CountDownLatch validating = new CountDownLatch(1);
+        CountDownLatch validated = new CountDownLatch(1);
+        when(this.wikiTransfer.validate(largeContent)).thenAnswer(invocation -> {
+            validating.countDown();
+            assertTrue(validated.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
+            return 1;
+        });
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<Integer> largeImport = executor.submit(() -> this.imports.start(largeContent, false));
+            assertTrue(validating.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
+
+            // Another wiki imports a file while the large one is still being validated.
+            assertTimeoutPreemptively(Duration.ofSeconds(TIMEOUT_SECONDS),
+                () -> assertEquals(2, this.imports.start(CONTENT, false)));
+
+            validated.countDown();
+            assertEquals(1, largeImport.get(TIMEOUT_SECONDS, TimeUnit.SECONDS));
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test

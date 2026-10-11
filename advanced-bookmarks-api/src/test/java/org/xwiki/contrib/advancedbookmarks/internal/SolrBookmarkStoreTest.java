@@ -26,11 +26,13 @@ import java.util.Optional;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrRequest;
+import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.SolrInputDocument;
+import org.apache.solr.common.util.NamedList;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -155,23 +157,55 @@ class SolrBookmarkStoreTest
     }
 
     @Test
-    void rejectsADocumentWhosePagesDoNotMatchItsJson() throws Exception
+    void readsTheStoredJsonWithoutParsingIt() throws Exception
     {
-        QueryResponse response = responseWith(bookmarkDocument(BOOKMARK_JSON, 7L, "wiki:Other.Page"));
+        // Validating the data is left to the caller: reading runs on every page view.
+        QueryResponse response = responseWith(bookmarkDocument("{", 7L));
         when(this.client.query(any(SolrQuery.class))).thenReturn(response);
 
-        assertThrows(BookmarkStoreException.class, () -> this.store.get(WIKI, USER));
+        assertEquals(Optional.of(new BookmarkRecord("{", 7L)), this.store.get(WIKI, USER));
+
+        ArgumentCaptor<SolrQuery> query = ArgumentCaptor.forClass(SolrQuery.class);
+        verify(this.client).query(query.capture());
+        assertEquals("data,_version_", query.getValue().getFields());
     }
 
     @Test
-    void reportsCorruptedStoredJsonAsAStorageFailure() throws Exception
+    void findsAPageAmongTheIndexedPagesOfAUser() throws Exception
     {
-        QueryResponse response = responseWith(bookmarkDocument("{", 7L, "wiki:Space.Page"));
-        when(this.client.query(any(SolrQuery.class))).thenReturn(response);
+        QueryResponse found = responseWith();
+        found.getResults().setNumFound(1);
+        QueryResponse missing = responseWith();
+        when(this.client.query(any(SolrQuery.class))).thenReturn(found, missing);
 
-        BookmarkStoreException exception =
-            assertThrows(BookmarkStoreException.class, () -> this.store.get(WIKI, USER));
-        assertFalse(exception instanceof BookmarkInvalidDataException);
+        assertTrue(this.store.containsPage(WIKI, USER, OLD_PAGE));
+        assertFalse(this.store.containsPage(WIKI, USER, NEW_PAGE));
+
+        ArgumentCaptor<SolrQuery> query = ArgumentCaptor.forClass(SolrQuery.class);
+        verify(this.client, times(2)).query(query.capture());
+        assertEquals(List.of("id:4\\:wiki16\\:xwiki\\:XWiki.User", "pages:wiki\\:Old.Page"),
+            List.of(query.getAllValues().get(0).getFilterQueries()));
+        assertEquals(0, query.getAllValues().get(0).getRows());
+    }
+
+    @Test
+    void neverFindsAPageReferenceTooLongToBeStored() throws Exception
+    {
+        assertFalse(this.store.containsPage(WIKI, USER, "p".repeat(513)));
+        assertThrows(BookmarkStoreException.class, () -> this.store.containsPage(WIKI, USER, " "));
+        assertThrows(BookmarkStoreException.class, () -> this.store.containsPage(WIKI, null, OLD_PAGE));
+
+        verifyNoInteractions(this.client);
+    }
+
+    @Test
+    void wrapsFailuresToFindAPage() throws Exception
+    {
+        when(this.client.query(any(SolrQuery.class))).thenThrow(new IOException("down"))
+            .thenThrow(new org.apache.solr.common.SolrException(ErrorCode.SERVER_ERROR, "remote failure"));
+
+        assertThrows(BookmarkStoreException.class, () -> this.store.containsPage(WIKI, USER, OLD_PAGE));
+        assertThrows(BookmarkStoreException.class, () -> this.store.containsPage(WIKI, USER, OLD_PAGE));
     }
 
     @Test
@@ -220,41 +254,41 @@ class SolrBookmarkStoreTest
         assertThrows(BookmarkStoreException.class, () -> this.store.get(WIKI, "u".repeat(513)));
         assertThrows(BookmarkStoreException.class, () -> this.store.deleteUser(""));
         assertThrows(BookmarkStoreException.class, () -> this.store.deleteWiki(null));
-        assertThrows(BookmarkStoreException.class, () -> this.store.findUsersByPage(WIKI, ""));
+        assertThrows(BookmarkStoreException.class, () -> this.store.replacePage(WIKI, "", NEW_PAGE));
+        assertThrows(BookmarkStoreException.class, () -> this.store.replacePage(" ", OLD_PAGE, NEW_PAGE));
 
         verifyNoInteractions(this.client);
     }
 
     @Test
-    void savesJsonAndIndexesItsPageReferences() throws Exception
+    void savesJsonAndIndexesItsPageReferencesInOneCommittedRequest() throws Exception
     {
-        QueryResponse response = responseWith(bookmarkDocument(BOOKMARK_JSON, 4L, "wiki:Space.Page"));
-        when(this.client.query(any(SolrQuery.class))).thenReturn(response);
+        when(this.client.request(any(SolrRequest.class), any())).thenReturn(written(4L));
 
         long version = this.store.save(WIKI, USER, BOOKMARK_JSON, 3L);
 
         assertEquals(4L, version);
-        ArgumentCaptor<SolrInputDocument> documentCaptor = ArgumentCaptor.forClass(SolrInputDocument.class);
-        verify(this.client).add(documentCaptor.capture());
-        SolrInputDocument saved = documentCaptor.getValue();
+        UpdateRequest request = capturedWrites(1).get(0);
+        SolrInputDocument saved = request.getDocuments().get(0);
         assertEquals(WIKI, saved.getFieldValue(SolrBookmarkStore.WIKI_FIELD));
         assertEquals(USER, saved.getFieldValue(SolrBookmarkStore.USER_FIELD));
         assertEquals("wiki:Space.Page", saved.getFieldValue(SolrBookmarkStore.PAGES_FIELD));
         assertEquals(3L, saved.getFieldValue(VERSION));
-        verify(this.client).commit();
+        assertEquals("true", request.getParams().get("versions"));
+        assertEquals("true", request.getParams().get("commit"));
+        // Nothing is read back: the version comes from the response.
+        verify(this.client, never()).query(any(SolrQuery.class));
+        verify(this.client, never()).commit();
     }
 
     @Test
     void requiresThatANewDocumentDoesNotExistYet() throws Exception
     {
-        QueryResponse response = responseWith(bookmarkDocument(BOOKMARK_JSON, 1L, "wiki:Space.Page"));
-        when(this.client.query(any(SolrQuery.class))).thenReturn(response);
+        when(this.client.request(any(SolrRequest.class), any())).thenReturn(written(1L));
 
         this.store.save(WIKI, USER, BOOKMARK_JSON, 0L);
 
-        ArgumentCaptor<SolrInputDocument> documentCaptor = ArgumentCaptor.forClass(SolrInputDocument.class);
-        verify(this.client).add(documentCaptor.capture());
-        assertEquals(-1L, documentCaptor.getValue().getFieldValue(VERSION));
+        assertEquals(-1L, capturedWrites(1).get(0).getDocuments().get(0).getFieldValue(VERSION));
     }
 
     @Test
@@ -262,35 +296,31 @@ class SolrBookmarkStoreTest
     {
         assertThrows(BookmarkInvalidDataException.class, () -> this.store.save(WIKI, USER, "{}", 0L));
         assertThrows(BookmarkStoreException.class, () -> this.store.save(WIKI, USER, BOOKMARK_JSON, -1L));
-        assertThrows(BookmarkStoreException.class, () -> this.store.delete(WIKI, USER, -1L));
 
         verifyNoInteractions(this.client);
     }
 
     @Test
-    void reportsAConflictIfAnotherWriteReplacesTheDataBeforeVerification() throws Exception
+    void reportsAFailureIfSolrDoesNotReturnTheVersion() throws Exception
     {
-        QueryResponse response = responseWith(bookmarkDocument("{\"folders\":[],\"bookmarks\":[]}", 5L));
-        when(this.client.query(any(SolrQuery.class))).thenReturn(response);
+        NamedList<Object> withoutVersion = new NamedList<>();
+        NamedList<Object> withInvalidVersion = new NamedList<>();
+        NamedList<Object> adds = new NamedList<>();
+        adds.add("id", "4");
+        withInvalidVersion.add("adds", adds);
+        when(this.client.request(any(SolrRequest.class), any())).thenReturn(null, withoutVersion, withInvalidVersion);
 
-        assertThrows(BookmarkStoreConflictException.class, () -> this.store.save(WIKI, USER, BOOKMARK_JSON, 3L));
-    }
-
-    @Test
-    void reportsAFailureIfTheSavedDocumentCannotBeFound() throws Exception
-    {
-        QueryResponse empty = responseWith();
-        when(this.client.query(any(SolrQuery.class))).thenReturn(empty);
-
-        BookmarkStoreException exception =
-            assertThrows(BookmarkStoreException.class, () -> this.store.save(WIKI, USER, BOOKMARK_JSON, 3L));
-        assertFalse(exception instanceof BookmarkStoreConflictException);
+        for (int attempt = 0; attempt < 3; attempt++) {
+            BookmarkStoreException exception =
+                assertThrows(BookmarkStoreException.class, () -> this.store.save(WIKI, USER, BOOKMARK_JSON, 3L));
+            assertFalse(exception instanceof BookmarkStoreConflictException);
+        }
     }
 
     @Test
     void wrapsWriteFailures() throws Exception
     {
-        when(this.client.add(any(SolrInputDocument.class))).thenThrow(new IOException("down"));
+        when(this.client.request(any(SolrRequest.class), any())).thenThrow(new IOException("down"));
 
         BookmarkStoreException exception =
             assertThrows(BookmarkStoreException.class, () -> this.store.save(WIKI, USER, BOOKMARK_JSON, 3L));
@@ -300,7 +330,7 @@ class SolrBookmarkStoreTest
     @Test
     void mapsTheNativeSolrVersionConflict() throws Exception
     {
-        when(this.client.add(any(SolrInputDocument.class))).thenThrow(versionConflict());
+        when(this.client.request(any(SolrRequest.class), any())).thenThrow(versionConflict());
 
         assertThrows(BookmarkStoreConflictException.class, () -> this.store.save(WIKI, USER, BOOKMARK_JSON, 3L));
     }
@@ -308,27 +338,10 @@ class SolrBookmarkStoreTest
     @Test
     void mapsAWrappedSolrVersionConflict() throws Exception
     {
-        when(this.client.add(any(SolrInputDocument.class)))
+        when(this.client.request(any(SolrRequest.class), any()))
             .thenThrow(new org.apache.solr.client.solrj.SolrServerException(versionConflict()));
 
         assertThrows(BookmarkStoreConflictException.class, () -> this.store.save(WIKI, USER, BOOKMARK_JSON, 3L));
-    }
-
-    @Test
-    void deletesConditionallyOnTheVersion() throws Exception
-    {
-        this.store.delete(WIKI, USER, 5L);
-
-        verify(this.client).request(any(SolrRequest.class), any());
-        verify(this.client).commit();
-    }
-
-    @Test
-    void mapsADeleteVersionConflict() throws Exception
-    {
-        when(this.client.request(any(SolrRequest.class), any())).thenThrow(versionConflict());
-
-        assertThrows(BookmarkStoreConflictException.class, () -> this.store.delete(WIKI, USER, 5L));
     }
 
     @Test
@@ -383,12 +396,12 @@ class SolrBookmarkStoreTest
     }
 
     @Test
-    void findsUsersByPageWithinTheWiki() throws Exception
+    void looksForTheUsersOfARenamedPageWithinTheWiki() throws Exception
     {
-        QueryResponse response = responseWith(userDocument(USER));
+        QueryResponse response = responseWith();
         when(this.client.query(any(SolrQuery.class))).thenReturn(response);
 
-        assertEquals(List.of(USER), this.store.findUsersByPage(WIKI, OLD_PAGE));
+        assertEquals(0, this.store.replacePage(WIKI, OLD_PAGE, NEW_PAGE));
 
         ArgumentCaptor<SolrQuery> queryCaptor = ArgumentCaptor.forClass(SolrQuery.class);
         verify(this.client).query(queryCaptor.capture());
@@ -400,15 +413,14 @@ class SolrBookmarkStoreTest
     {
         QueryResponse usersResponse = responseWith(userDocument(USER));
         QueryResponse currentResponse = responseWith(bookmarkDocument(OLD_JSON, 3L, OLD_PAGE));
-        QueryResponse savedResponse = responseWith(bookmarkDocument(NEW_JSON, 4L, NEW_PAGE));
-        when(this.client.query(any(SolrQuery.class))).thenReturn(usersResponse, currentResponse, savedResponse);
+        when(this.client.query(any(SolrQuery.class))).thenReturn(usersResponse, currentResponse);
+        when(this.client.request(any(SolrRequest.class), any())).thenReturn(written(4L));
 
         assertEquals(1, this.store.replacePage(WIKI, OLD_PAGE, NEW_PAGE));
 
-        ArgumentCaptor<SolrInputDocument> documentCaptor = ArgumentCaptor.forClass(SolrInputDocument.class);
-        verify(this.client).add(documentCaptor.capture());
-        assertEquals(NEW_JSON, documentCaptor.getValue().getFieldValue(SolrBookmarkStore.DATA_FIELD));
-        assertEquals(NEW_PAGE, documentCaptor.getValue().getFieldValue(SolrBookmarkStore.PAGES_FIELD));
+        SolrInputDocument saved = capturedWrites(1).get(0).getDocuments().get(0);
+        assertEquals(NEW_JSON, saved.getFieldValue(SolrBookmarkStore.DATA_FIELD));
+        assertEquals(NEW_PAGE, saved.getFieldValue(SolrBookmarkStore.PAGES_FIELD));
     }
 
     @Test
@@ -416,14 +428,13 @@ class SolrBookmarkStoreTest
     {
         QueryResponse usersResponse = responseWith(userDocument(USER));
         QueryResponse currentResponse = responseWith(bookmarkDocument(OLD_JSON, 3L, OLD_PAGE));
-        QueryResponse savedResponse = responseWith(bookmarkDocument(NEW_JSON, 5L, NEW_PAGE));
-        when(this.client.query(any(SolrQuery.class)))
-            .thenReturn(usersResponse, currentResponse, currentResponse, savedResponse);
-        when(this.client.add(any(SolrInputDocument.class))).thenThrow(versionConflict()).thenReturn(null);
+        when(this.client.query(any(SolrQuery.class))).thenReturn(usersResponse, currentResponse, currentResponse);
+        when(this.client.request(any(SolrRequest.class), any())).thenThrow(versionConflict())
+            .thenReturn(written(5L));
 
         assertEquals(1, this.store.replacePage(WIKI, OLD_PAGE, NEW_PAGE));
 
-        verify(this.client, times(2)).add(any(SolrInputDocument.class));
+        capturedWrites(2);
     }
 
     @Test
@@ -432,11 +443,56 @@ class SolrBookmarkStoreTest
         QueryResponse usersResponse = responseWith(userDocument(USER));
         QueryResponse currentResponse = responseWith(bookmarkDocument(OLD_JSON, 3L, OLD_PAGE));
         when(this.client.query(any(SolrQuery.class))).thenReturn(usersResponse, currentResponse);
-        when(this.client.add(any(SolrInputDocument.class))).thenThrow(versionConflict());
+        when(this.client.request(any(SolrRequest.class), any())).thenThrow(versionConflict());
 
         assertThrows(BookmarkStoreConflictException.class, () -> this.store.replacePage(WIKI, OLD_PAGE, NEW_PAGE));
 
-        verify(this.client, times(3)).add(any(SolrInputDocument.class));
+        capturedWrites(3);
+        assertEquals("Unable to update the bookmarks of [xwiki:XWiki.User] after a page rename: "
+            + "The bookmark document was modified concurrently.", this.logCapture.getMessage(0));
+    }
+
+    @Test
+    void updatesTheOtherUsersWhenTheBookmarksOfOneUserCannotBeUpdated() throws Exception
+    {
+        String otherUser = "xwiki:XWiki.Zoe";
+        QueryResponse usersResponse = responseWith(userDocument(USER), userDocument(otherUser));
+        QueryResponse conflictingResponse = responseWith(bookmarkDocument(OLD_JSON, 3L, OLD_PAGE));
+        QueryResponse currentResponse = responseWith(bookmarkDocument(OLD_JSON, 6L, OLD_PAGE));
+        when(this.client.query(any(SolrQuery.class))).thenReturn(usersResponse, conflictingResponse,
+            conflictingResponse, conflictingResponse, currentResponse);
+        // The first user keeps conflicting until the replacement is given up; the second one is then updated.
+        when(this.client.request(any(SolrRequest.class), any())).thenThrow(versionConflict(), versionConflict(),
+            versionConflict()).thenReturn(written(7L));
+
+        BookmarkStoreException exception =
+            assertThrows(BookmarkStoreConflictException.class, () -> this.store.replacePage(WIKI, OLD_PAGE, NEW_PAGE));
+
+        SolrInputDocument lastSaved = capturedWrites(4).get(3).getDocuments().get(0);
+        assertEquals(otherUser, lastSaved.getFieldValue(SolrBookmarkStore.USER_FIELD));
+        assertEquals(NEW_JSON, lastSaved.getFieldValue(SolrBookmarkStore.DATA_FIELD));
+        assertEquals(0, exception.getSuppressed().length);
+        assertEquals("Unable to update the bookmarks of [xwiki:XWiki.User] after a page rename: "
+            + "The bookmark document was modified concurrently.", this.logCapture.getMessage(0));
+    }
+
+    @Test
+    void reportsTheFirstFailureWithTheNextOnesAttached() throws Exception
+    {
+        String otherUser = "xwiki:XWiki.Zoe";
+        QueryResponse usersResponse = responseWith(userDocument(USER), userDocument(otherUser));
+        QueryResponse corruptedResponse = responseWith(bookmarkDocument("{", 3L, OLD_PAGE));
+        when(this.client.query(any(SolrQuery.class))).thenReturn(usersResponse, corruptedResponse);
+
+        BookmarkStoreException exception =
+            assertThrows(BookmarkStoreException.class, () -> this.store.replacePage(WIKI, OLD_PAGE, NEW_PAGE));
+
+        assertEquals(1, exception.getSuppressed().length);
+        verify(this.client, never()).request(any(SolrRequest.class), any());
+        assertEquals("Unable to update the bookmarks of [xwiki:XWiki.User] after a page rename: "
+            + "The bookmark document is invalid.", this.logCapture.getMessage(0));
+        assertEquals("Unable to update the bookmarks of [xwiki:XWiki.Zoe] after a page rename: "
+            + "The bookmark document is invalid.", this.logCapture.getMessage(1));
     }
 
     @Test
@@ -448,7 +504,7 @@ class SolrBookmarkStoreTest
 
         assertEquals(0, this.store.replacePage(WIKI, OLD_PAGE, NEW_PAGE));
 
-        verify(this.client, never()).add(any(SolrInputDocument.class));
+        verify(this.client, never()).request(any(SolrRequest.class), any());
     }
 
     @Test
@@ -491,6 +547,26 @@ class SolrBookmarkStoreTest
             assertFalse(this.store.isAvailable());
             assertEquals("The bookmark storage is not available.", this.logCapture.getMessage(attempt));
         }
+    }
+
+    /**
+     * @return the response of Solr to a write with {@code versions=true}: the version of the written document
+     */
+    private static NamedList<Object> written(long version)
+    {
+        NamedList<Object> adds = new NamedList<>();
+        adds.add("4:wiki16:xwiki:XWiki.User", version);
+        NamedList<Object> response = new NamedList<>();
+        response.add("adds", adds);
+        return response;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<UpdateRequest> capturedWrites(int count) throws Exception
+    {
+        ArgumentCaptor<SolrRequest<?>> captor = ArgumentCaptor.forClass(SolrRequest.class);
+        verify(this.client, times(count)).request(captor.capture(), any());
+        return captor.getAllValues().stream().map(UpdateRequest.class::cast).toList();
     }
 
     private static QueryResponse responseWith(SolrDocument... sourceDocuments)

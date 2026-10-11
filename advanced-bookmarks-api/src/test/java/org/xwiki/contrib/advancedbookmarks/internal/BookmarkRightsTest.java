@@ -90,6 +90,8 @@ class BookmarkRightsTest
         when(this.xcontext.getWiki()).thenReturn(this.xwiki);
         when(this.xcontext.getWikiId()).thenReturn(WIKI);
         when(this.xcontext.getUserReference()).thenReturn(ALICE);
+        // Outside of a page, XWiki takes the current user as the author of the running code.
+        when(this.xcontext.getAuthorReference()).thenReturn(ALICE);
     }
 
     @Test
@@ -135,6 +137,34 @@ class BookmarkRightsTest
     }
 
     @Test
+    void requiresThatTheAuthorOfTheRunningCodeIsAnAdministratorToo() throws Exception
+    {
+        DocumentReference carol = new DocumentReference("xwiki", "XWiki", "carol");
+        WikiReference wiki = new WikiReference(WIKI);
+        when(this.authorizationManager.hasAccess(Right.ADMIN, ALICE, wiki)).thenReturn(true);
+        when(this.authorizationManager.hasAccess(Right.ADMIN, carol, wiki)).thenReturn(true);
+        XWikiDocument bobProfile = mock(XWikiDocument.class);
+        when(bobProfile.getXObject(any(org.xwiki.model.reference.EntityReference.class)))
+            .thenReturn(new BaseObject());
+        when(this.xwiki.getDocument(BOB, this.xcontext)).thenReturn(bobProfile);
+
+        // A page written by a user who does not administer the wiki, viewed by an administrator.
+        when(this.xcontext.getAuthorReference()).thenReturn(BOB);
+        assertFalse(this.rights.isAdmin());
+        assertFalse(this.rights.canManage(BOB));
+        // Users still manage their own bookmarks, whoever wrote the page.
+        assertTrue(this.rights.canManage(ALICE));
+
+        // A page written by another administrator, such as the pages of the extension.
+        when(this.xcontext.getAuthorReference()).thenReturn(carol);
+        assertTrue(this.rights.isAdmin());
+        assertTrue(this.rights.canManage(BOB));
+
+        when(this.xcontext.getAuthorReference()).thenReturn(null);
+        assertFalse(this.rights.isAdmin());
+    }
+
+    @Test
     void refusesAdministratorsTheBookmarksOfANonUser() throws Exception
     {
         when(this.authorizationManager.hasAccess(Right.ADMIN, ALICE, new WikiReference(WIKI))).thenReturn(true);
@@ -169,6 +199,15 @@ class BookmarkRightsTest
 
         assertTrue(this.rights.canView(PAGE));
         assertFalse(this.rights.canView(new DocumentReference(WIKI, "Space", "Secret")));
+    }
+
+    @Test
+    void checksTheViewRightOfAGivenUser()
+    {
+        when(this.authorizationManager.hasAccess(Right.VIEW, BOB, PAGE)).thenReturn(true);
+
+        assertTrue(this.rights.canView(BOB, PAGE));
+        assertFalse(this.rights.canView(ALICE, PAGE));
     }
 
     @Test

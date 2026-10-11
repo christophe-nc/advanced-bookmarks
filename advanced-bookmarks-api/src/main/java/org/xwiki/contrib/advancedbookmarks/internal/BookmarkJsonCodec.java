@@ -245,8 +245,8 @@ public class BookmarkJsonCodec
 
     private static boolean isValidPage(JsonNode page)
     {
-        return page != null && page.isTextual() && !page.textValue().isBlank()
-            && page.textValue().length() <= MAX_PAGE_REFERENCE_LENGTH;
+        // The text value of a node that is not a string is null, hence invalid.
+        return page != null && BookmarkReferences.isValidReference(page.textValue());
     }
 
     private static ObjectNode parse(String json) throws BookmarkInvalidDataException

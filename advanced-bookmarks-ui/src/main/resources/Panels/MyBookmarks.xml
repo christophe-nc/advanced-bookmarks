@@ -198,15 +198,9 @@
       #end
     &lt;li&gt;&lt;span class="advanced-bookmarks-panel-inaccessible" title="$escapetool.xml($services.localization.render('advancedbookmarks.panel.inaccessible'))"&gt;$escapetool.xml($text)&lt;/span&gt;&lt;/li&gt;
     #else
-      #if ($text == '' &amp;&amp; $bookmark.exists)
-        #set ($text = $xwiki.getDocument($bookmark.page).plainTitle)
-      #end
+      ## Without label, the service gives the title of the page, or its name.
       #if ($text == '')
-        #set ($pageReference = $services.model.resolveDocument($bookmark.page))
-        #set ($text = $pageReference.name)
-        #if ($text == 'WebHome')
-          #set ($text = $pageReference.lastSpaceReference.name)
-        #end
+        #set ($text = "$!bookmark.title")
       #end
       #if ($bookmark.exists)
     &lt;li&gt;&lt;a href="$escapetool.xml($bookmark.url)"&gt;$escapetool.xml($text)&lt;/a&gt;&lt;/li&gt;
