@@ -45,7 +45,8 @@ import org.xwiki.script.service.ScriptServiceManager;
 /**
  * Exposes bookmarks to scripts as maps ready to be serialized as JSON. Every result has a {@code status} key holding
  * an HTTP status code and, on failure, an {@code error} key holding a code without any detail: {@code forbidden},
- * {@code invalidToken}, {@code methodNotAllowed}, {@code invalid}, {@code conflict} or {@code storageError}.
+ * {@code invalidToken}, {@code methodNotAllowed}, {@code invalid}, {@code tooLarge}, {@code conflict} or
+ * {@code storageError}.
  * Details are logged on the server.
  * <p>
  * Write operations only accept POST requests carrying a valid CSRF token in the {@code form_token} parameter.
@@ -66,6 +67,8 @@ public class AdvancedBookmarksScriptService implements ScriptService
     private static final String VERSION = "version";
 
     private static final String BOOKMARKS = "bookmarks";
+
+    private static final String SIZE = "size";
 
     @Inject
     private BookmarkManager bookmarkManager;
@@ -116,7 +119,8 @@ public class AdvancedBookmarksScriptService implements ScriptService
      * @param user the owner of the bookmarks, such as {@code XWiki.jdoe} or {@code jdoe}; empty for the current user
      * @return {@code user}, {@code version}, {@code folders} and {@code bookmarks}; each bookmark has the {@code page},
      *         {@code label}, {@code folder}, {@code order}, {@code panel} and {@code viewable} keys and, when the
-     *         current user may view the page, {@code exists} and {@code url}
+     *         current user may view the page, {@code exists} and {@code url}; the space used by the bookmarks and the
+     *         space allowed, in bytes, under the {@code size} and {@code maxSize} keys
      */
     public Map<String, Object> getBookmarks(String user)
     {
@@ -126,6 +130,8 @@ public class AdvancedBookmarksScriptService implements ScriptService
             Map<String, Object> result = BookmarkResults.success();
             result.put("user", this.serializer.serialize(owner));
             result.put(VERSION, String.valueOf(data.getVersion()));
+            result.put(SIZE, this.jsonCodec.getSize(data));
+            result.put("maxSize", BookmarkJsonCodec.MAX_JSON_BYTES);
             result.put("folders", this.views.getFolders(data.getFolders()));
             result.put(BOOKMARKS, this.views.getBookmarks(this.bookmarkManager.getDisplayOrder(data)));
             return result;
@@ -188,7 +194,8 @@ public class AdvancedBookmarksScriptService implements ScriptService
      * @param json the folders and bookmarks, as a JSON object with the {@code folders} and {@code bookmarks} arrays
      * @param version the version the bookmarks were read at, as returned by {@link #getBookmarks(String)}; {@code 0}
      *            if there were none
-     * @return the new version, under the {@code version} key
+     * @return the new version, under the {@code version} key, and the space used by the saved bookmarks, in bytes,
+     *         under the {@code size} key
      */
     public Map<String, Object> save(String user, String json, String version)
     {
@@ -198,6 +205,8 @@ public class AdvancedBookmarksScriptService implements ScriptService
             data.setVersion(parseVersion(version));
             Map<String, Object> result = BookmarkResults.success();
             result.put(VERSION, String.valueOf(this.bookmarkManager.save(owner, data)));
+            // Saving normalizes the data in place: its size is the size of the stored bookmarks.
+            result.put(SIZE, this.jsonCodec.getSize(data));
             return result;
         });
     }

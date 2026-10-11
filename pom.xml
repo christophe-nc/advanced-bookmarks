@@ -78,6 +78,15 @@
     <module>advanced-bookmarks-ui</module>
   </modules>
 
+  <profiles>
+    <profile>
+      <id>integration-tests</id>
+      <modules>
+        <module>advanced-bookmarks-test</module>
+      </modules>
+    </profile>
+  </profiles>
+
   <build>
     <plugins>
       <plugin>

@@ -31,12 +31,13 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkAccessDeniedException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreConflictException;
+import org.xwiki.contrib.advancedbookmarks.BookmarkTooLargeException;
 
 /**
  * Runs the operations of the script services and translates their outcome into maps ready to be serialized as JSON.
  * Every result has a {@code status} key holding an HTTP status code and, on failure, an {@code error} key holding a
  * code without any detail: {@code forbidden}, {@code invalidToken}, {@code methodNotAllowed}, {@code invalid},
- * {@code conflict} or {@code storageError}. Details are logged on the server.
+ * {@code tooLarge}, {@code conflict} or {@code storageError}. Details are logged on the server.
  *
  * @version $Id$
  * @since 1.0
@@ -90,16 +91,24 @@ public class BookmarkResults
     {
         try {
             return operation.run();
-        } catch (BookmarkAccessDeniedException e) {
-            return error(FORBIDDEN, "forbidden");
-        } catch (BookmarkInvalidDataException e) {
-            return error(BAD_REQUEST, "invalid");
-        } catch (BookmarkStoreConflictException e) {
-            return error(CONFLICT, "conflict");
         } catch (BookmarkException e) {
-            this.logger.error("Advanced Bookmarks operation failed.", e);
-            return error(SERVER_ERROR, "storageError");
+            return toError(e);
         }
+    }
+
+    private Map<String, Object> toError(BookmarkException exception)
+    {
+        // A subclass comes before its parent class, which the compiler checks.
+        return switch (exception) {
+            case BookmarkAccessDeniedException denied -> error(FORBIDDEN, "forbidden");
+            case BookmarkTooLargeException tooLarge -> error(BAD_REQUEST, "tooLarge");
+            case BookmarkInvalidDataException invalid -> error(BAD_REQUEST, "invalid");
+            case BookmarkStoreConflictException conflict -> error(CONFLICT, "conflict");
+            default -> {
+                this.logger.error("Advanced Bookmarks operation failed.", exception);
+                yield error(SERVER_ERROR, "storageError");
+            }
+        };
     }
 
     /**

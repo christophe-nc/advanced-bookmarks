@@ -19,6 +19,7 @@
  */
 package org.xwiki.contrib.advancedbookmarks.internal;
 
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +31,7 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkEntry;
 import org.xwiki.contrib.advancedbookmarks.BookmarkFolder;
 import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreException;
+import org.xwiki.contrib.advancedbookmarks.BookmarkTooLargeException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -78,6 +80,8 @@ class BookmarkJsonCodecTest
     void rejectsMalformedOrUnexpectedData()
     {
         assertThrows(BookmarkStoreException.class, () -> codec.getPageReferences("{"));
+        assertThrows(BookmarkInvalidDataException.class, () -> codec.read((String) null));
+        assertThrows(BookmarkInvalidDataException.class, () -> codec.read("  "));
         assertThrows(BookmarkStoreException.class, () -> codec.getPageReferences("{\"folders\":[]}"));
         assertThrows(BookmarkStoreException.class,
             () -> codec.getPageReferences("{\"folders\":[],\"bookmarks\":[{\"page\":null}]}"));
@@ -86,9 +90,44 @@ class BookmarkJsonCodecTest
     @Test
     void rejectsOversizedData()
     {
-        String json = " ".repeat(BookmarkJsonCodec.MAX_JSON_BYTES + 1);
+        // Not blank, which is rejected as invalid before its size is checked.
+        String json = "{" + " ".repeat(BookmarkJsonCodec.MAX_JSON_BYTES);
 
-        assertThrows(BookmarkStoreException.class, () -> codec.getPageReferences(json));
+        assertThrows(BookmarkTooLargeException.class, () -> codec.getPageReferences(json));
+        assertThrows(BookmarkTooLargeException.class, () -> codec.read(json));
+    }
+
+    @Test
+    void refusesARenamingThatWouldExceedTheMaximumSize() throws Exception
+    {
+        BookmarkData data = dataOfSize(BookmarkJsonCodec.MAX_JSON_BYTES);
+        String json = codec.write(data);
+
+        assertThrows(BookmarkTooLargeException.class,
+            () -> codec.replacePage(json, "wiki:Space.Page", "wiki:Space.LongerPage"));
+    }
+
+    @Test
+    void measuresTheSizeOfTheWrittenJsonInUtf8Bytes() throws Exception
+    {
+        BookmarkEntry bookmark = new BookmarkEntry();
+        bookmark.setPage("wiki:Space.Page");
+        // Each accented letter takes two bytes in UTF-8: the limit is on bytes, as in Lucene.
+        bookmark.setLabel("Réunion");
+        BookmarkData data = new BookmarkData();
+        data.setBookmarks(List.of(bookmark));
+
+        assertEquals(codec.write(data).getBytes(StandardCharsets.UTF_8).length, codec.getSize(data));
+        assertEquals(codec.write(data).length() + 1, codec.getSize(data));
+    }
+
+    @Test
+    void acceptsDataOfExactlyTheMaximumSize() throws Exception
+    {
+        assertEquals(BookmarkJsonCodec.MAX_JSON_BYTES, codec.write(dataOfSize(BookmarkJsonCodec.MAX_JSON_BYTES))
+            .getBytes(StandardCharsets.UTF_8).length);
+        assertThrows(BookmarkTooLargeException.class,
+            () -> codec.write(dataOfSize(BookmarkJsonCodec.MAX_JSON_BYTES + 1)));
     }
 
     @Test
@@ -157,7 +196,7 @@ class BookmarkJsonCodecTest
         BookmarkData data = new BookmarkData();
         data.setBookmarks(List.of(bookmark));
 
-        assertThrows(BookmarkInvalidDataException.class, () -> codec.write(data));
+        assertThrows(BookmarkTooLargeException.class, () -> codec.write(data));
     }
 
     @Test
@@ -203,6 +242,20 @@ class BookmarkJsonCodecTest
         assertThrows(BookmarkInvalidDataException.class, () -> codec.read(json.readTree("{\"folders\":[]}")));
         String oversized = "{\"folders\":[],\"bookmarks\":[{\"label\":\""
             + "l".repeat(BookmarkJsonCodec.MAX_JSON_BYTES) + "\"}]}";
-        assertThrows(BookmarkInvalidDataException.class, () -> codec.read(json.readTree(oversized)));
+        assertThrows(BookmarkTooLargeException.class, () -> codec.read(json.readTree(oversized)));
+    }
+
+    /**
+     * @return data with a single bookmark whose JSON has exactly the given size, in bytes
+     */
+    private BookmarkData dataOfSize(int size)
+    {
+        BookmarkEntry bookmark = new BookmarkEntry();
+        bookmark.setPage("wiki:Space.Page");
+        bookmark.setLabel("");
+        BookmarkData data = new BookmarkData();
+        data.setBookmarks(List.of(bookmark));
+        bookmark.setLabel("l".repeat(size - codec.getSize(data)));
+        return data;
     }
 }

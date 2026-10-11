@@ -204,9 +204,8 @@ public class DefaultBookmarkManager implements BookmarkManager
         if (this.configuration.isExcluded(page) || !this.rights.canView(page)) {
             throw new BookmarkAccessDeniedException();
         }
-        if (data.getBookmarks().size() >= BookmarkJsonCodec.MAX_ITEMS) {
-            throw new BookmarkInvalidDataException(null);
-        }
+        // No check of the number of bookmarks: the maximum size of the JSON, checked on writing, is always reached
+        // first, and reported as such.
         BookmarkEntry bookmark = new BookmarkEntry();
         bookmark.setPage(pageReference);
         bookmark.setLabel(this.pages.exists(page)

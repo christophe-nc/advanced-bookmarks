@@ -70,6 +70,25 @@
   background: #ffe1a6;
   font-weight: bold;
 }
+/* Usage indicator. Displayed only when not hidden, since a display rule would override the hidden attribute. */
+.advanced-bookmarks-usage:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+  gap: .4em;
+  font-size: .9em;
+  color: #495057;
+}
+.advanced-bookmarks-usage label {
+  margin: 0;
+  font-weight: normal;
+}
+.advanced-bookmarks-usage meter {
+  width: 6em;
+}
+.advanced-bookmarks-usage-full label {
+  color: #c62828;
+  font-weight: bold;
+}
 .advanced-bookmarks-status {
   font-size: .85em;
   color: #6c757d;

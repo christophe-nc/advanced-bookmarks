@@ -32,6 +32,7 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkData;
 import org.xwiki.contrib.advancedbookmarks.BookmarkEntry;
 import org.xwiki.contrib.advancedbookmarks.BookmarkFolder;
 import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
+import org.xwiki.contrib.advancedbookmarks.BookmarkTooLargeException;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -50,8 +51,12 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 @Singleton
 public class BookmarkJsonCodec
 {
-    /** Maximum size of the JSON of one user, in UTF-8 bytes. */
-    public static final int MAX_JSON_BYTES = 1_048_576;
+    /**
+     * Maximum size of the JSON of one user, in UTF-8 bytes. It is the largest value Lucene accepts in the
+     * {@code docValues} of the {@code string} field type of Solr, which the stored JSON uses: do not raise it without
+     * changing the Solr schema, which existing cores cannot change in place.
+     */
+    public static final int MAX_JSON_BYTES = 32_766;
 
     /** Maximum number of folders, and separately of bookmarks, of one user. */
     public static final int MAX_ITEMS = 10_000;
@@ -111,9 +116,10 @@ public class BookmarkJsonCodec
      */
     public BookmarkData read(JsonNode node) throws BookmarkInvalidDataException
     {
-        if (node == null || isTooLarge(node.toString())) {
+        if (node == null) {
             throw new BookmarkInvalidDataException(null);
         }
+        checkSize(node.toString());
         return toData(validate(node));
     }
 
@@ -146,9 +152,9 @@ public class BookmarkJsonCodec
      *
      * @param data the data to serialize
      * @return the JSON
-     * @throws BookmarkInvalidDataException if the JSON exceeds {@link #MAX_JSON_BYTES}
+     * @throws BookmarkTooLargeException if the JSON exceeds {@link #MAX_JSON_BYTES}
      */
-    public String write(BookmarkData data) throws BookmarkInvalidDataException
+    public String write(BookmarkData data) throws BookmarkTooLargeException
     {
         return write(data, Map.of());
     }
@@ -159,19 +165,27 @@ public class BookmarkJsonCodec
      * @param data the data to serialize
      * @param header root properties written before the folders and bookmarks
      * @return the JSON
-     * @throws BookmarkInvalidDataException if the JSON exceeds {@link #MAX_JSON_BYTES}
+     * @throws BookmarkTooLargeException if the JSON exceeds {@link #MAX_JSON_BYTES}
      */
-    public String write(BookmarkData data, Map<String, Object> header) throws BookmarkInvalidDataException
+    public String write(BookmarkData data, Map<String, Object> header) throws BookmarkTooLargeException
     {
         ObjectNode root = JSON.createObjectNode();
         header.forEach((name, value) -> root.set(name, JSON.valueToTree(value)));
         root.setAll(toTree(data));
         String json = serialize(root);
         // Checked on writing too, since JSON that reading would reject could never be read back.
-        if (isTooLarge(json)) {
-            throw new BookmarkInvalidDataException(null);
-        }
+        checkSize(json);
         return json;
+    }
+
+    /**
+     * @param data the data to measure
+     * @return the size of its JSON as {@link #write(BookmarkData)} produces it, in UTF-8 bytes, to be compared with
+     *         {@link #MAX_JSON_BYTES}
+     */
+    public int getSize(BookmarkData data)
+    {
+        return getSize(serialize(toTree(data)));
     }
 
     /**
@@ -201,7 +215,8 @@ public class BookmarkJsonCodec
      * @param oldPage the page reference to replace
      * @param newPage the replacement page reference
      * @return the updated JSON
-     * @throws BookmarkInvalidDataException if the JSON is invalid
+     * @throws BookmarkInvalidDataException if the JSON is invalid, or would exceed {@link #MAX_JSON_BYTES} with the
+     *             longer replacement page reference
      */
     public String replacePage(String json, String oldPage, String newPage) throws BookmarkInvalidDataException
     {
@@ -212,7 +227,9 @@ public class BookmarkJsonCodec
                 ((ObjectNode) bookmark).put(PAGE, newPage);
             }
         }
-        return serialize(root);
+        String result = serialize(root);
+        checkSize(result);
+        return result;
     }
 
     private static ArrayNode getBookmarkNodes(ObjectNode root) throws BookmarkInvalidDataException
@@ -234,9 +251,10 @@ public class BookmarkJsonCodec
 
     private static ObjectNode parse(String json) throws BookmarkInvalidDataException
     {
-        if (json == null || json.isBlank() || isTooLarge(json)) {
+        if (json == null || json.isBlank()) {
             throw new BookmarkInvalidDataException(null);
         }
+        checkSize(json);
         JsonNode root;
         try {
             root = JSON.readTree(json);
@@ -255,9 +273,16 @@ public class BookmarkJsonCodec
         return (ObjectNode) root;
     }
 
-    private static boolean isTooLarge(String json)
+    private static void checkSize(String json) throws BookmarkTooLargeException
     {
-        return json.getBytes(StandardCharsets.UTF_8).length > MAX_JSON_BYTES;
+        if (getSize(json) > MAX_JSON_BYTES) {
+            throw new BookmarkTooLargeException();
+        }
+    }
+
+    private static int getSize(String json)
+    {
+        return json.getBytes(StandardCharsets.UTF_8).length;
     }
 
     private static boolean isBoundedArray(JsonNode node)

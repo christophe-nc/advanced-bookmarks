@@ -149,6 +149,14 @@
       <artifactId>xwiki-platform-wiki-user-api</artifactId>
       <version>${platform.version}</version>
     </dependency>
+    <!-- Implementation of WikiUserManager, used by the macro: only installed by some flavors, so declared here for the
+         extension manager to install it where it is missing. -->
+    <dependency>
+      <groupId>org.xwiki.platform</groupId>
+      <artifactId>xwiki-platform-wiki-user-default</artifactId>
+      <version>${platform.version}</version>
+      <scope>runtime</scope>
+    </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>

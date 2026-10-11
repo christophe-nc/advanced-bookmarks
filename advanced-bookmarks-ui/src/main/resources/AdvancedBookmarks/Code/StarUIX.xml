@@ -136,6 +136,7 @@
     'error.invalidToken',
     'error.methodNotAllowed',
     'error.invalid',
+    'error.tooLarge',
     'error.conflict',
     'error.storageError',
     'error.unavailable',

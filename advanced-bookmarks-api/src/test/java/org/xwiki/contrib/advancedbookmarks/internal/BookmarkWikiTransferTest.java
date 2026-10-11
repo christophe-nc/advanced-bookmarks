@@ -130,13 +130,14 @@ class BookmarkWikiTransferTest
     void refusesAnExportTooLargeToBeImported() throws Exception
     {
         // Each user is within the limits of one user, but not the whole file.
-        int userCount = BookmarkWikiTransfer.MAX_FILE_BYTES / BookmarkJsonCodec.MAX_JSON_BYTES + 1;
+        int userSize = BookmarkJsonCodec.MAX_JSON_BYTES - 200;
+        int userCount = BookmarkWikiTransfer.MAX_FILE_BYTES / userSize + 1;
         List<String> users = new ArrayList<>();
         for (int i = 0; i < userCount; i++) {
             String user = "wiki:XWiki.user" + i;
             users.add(user);
             when(this.transfer.exportData(ReferenceStubs.page(user)))
-                .thenReturn(data("Space.Page", "l".repeat(BookmarkJsonCodec.MAX_JSON_BYTES - 200)));
+                .thenReturn(data("Space.Page", "l".repeat(userSize)));
         }
         when(this.store.listUsers(ReferenceStubs.WIKI)).thenReturn(users);
 

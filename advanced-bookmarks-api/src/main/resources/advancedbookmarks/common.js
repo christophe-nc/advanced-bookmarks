@@ -128,6 +128,7 @@ define('advanced-bookmarks-common', ['xwiki-meta'], function(xm) {
       'error.invalidToken',
       'error.methodNotAllowed',
       'error.invalid',
+      'error.tooLarge',
       'error.conflict',
       'error.storageError',
       'error.unavailable',

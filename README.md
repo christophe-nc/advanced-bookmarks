@@ -16,10 +16,11 @@ Upgrading the extension replaces a farm-level JAR, after which XWiki reloads the
 
 - **Star**: a star button is added to the action bar of every page (next to *Edit* and *Create*), for logged-in users. It adds the page to the uncategorized bookmarks, or removes it. It is not displayed on excluded pages (see [Configuration](#configuration)), nor on the pages of the extension itself.
 - **Panel**: the *Bookmarks* panel (`Panels.MyBookmarks`) lists the bookmarks selected for the panel, or the first ones, up to the configured panel size (ten by default), with a link to the management page. It is not added to the page layout automatically: add it in *Administration > Look & Feel > Panels*. Deleted pages are struck through; pages the user cannot view are shown without link.
-- **Management page**: `AdvancedBookmarks.WebHome` displays the `{{bookmarks/}}` macro, which can also be used in any other page. Users organize their bookmarks in folders and subfolders, by drag and drop or with the keyboard (arrow buttons and *Move to* lists), rename them, select bookmarks for the panel (up to the configured panel size) and filter the list. Changes are saved automatically; if the bookmarks were modified meanwhile (another tab, the star), they are reloaded.
-- **Export and import**: the *Export* button of the management page downloads the bookmarks as a JSON file. *Import…* reads such a file (1 MB at most) and, after confirmation, either adds it to the current bookmarks or replaces them. When adding, an imported folder is merged with the folder of the same name (ignoring case) at the same place, other folders are created, imported items come after the existing ones of their folder, and pages already bookmarked are skipped: importing an export of the same bookmarks changes nothing. Page references are exported without their wiki, so a file can be imported into another wiki or farm; pages of another wiki and excluded pages found in a file are skipped.
+- **Management page**: `AdvancedBookmarks.WebHome` displays the `{{bookmarks/}}` macro, which can also be used in any other page. Users organize their bookmarks in folders and subfolders, by drag and drop or with the keyboard (arrow buttons and *Move to* lists), rename them, select bookmarks for the panel (up to the configured panel size) and filter the list. Changes are saved automatically; if the bookmarks were modified meanwhile (another tab, the star), they are reloaded. A *Space used* indicator shows how much of the space allowed for the bookmarks is used, and warns when it is almost full.
+- **Size limit**: the bookmarks of a user (folders and bookmarks, stored as JSON) take at most 32,766 bytes, which is about 150 to 300 bookmarks depending on the length of the page references and labels. This is the largest value the Solr `string` field holding them accepts. Beyond it, saving, adding with the star or importing is refused with the `tooLarge` error and a message asking to remove bookmarks; nothing is changed.
+- **Export and import**: the *Export* button of the management page downloads the bookmarks as a JSON file. *Import…* reads such a file (32 KB at most) and, after confirmation, either adds it to the current bookmarks or replaces them. When adding, an imported folder is merged with the folder of the same name (ignoring case) at the same place, other folders are created, imported items come after the existing ones of their folder, and pages already bookmarked are skipped: importing an export of the same bookmarks changes nothing. Page references are exported without their wiki, so a file can be imported into another wiki or farm; pages of another wiki and excluded pages found in a file are skipped.
 - **Administrators** get a user picker on the management page: the chosen user's bookmarks open in a new tab (`AdvancedBookmarks.WebHome?user=XWiki.jdoe`), with a banner recalling whose bookmarks are displayed. The server checks the administration right on every request.
-- **Profile tab**: a *Bookmarks* tab is added to the user profile. It displays the same management interface for the user of the profile, and is only shown to this user and to the administrators of the wiki; anyone else reaching it gets an error message instead of the bookmarks. Bookmarks are kept for each wiki: the profile of a global user, which is on the main wiki, shows the bookmarks of the main wiki only.
+- **Profile tab**: a *Bookmarks* tab is added to the user profile. It displays the same management interface for the user of the profile, and is only shown to this user and to the administrators of the wiki; anyone else reaching it gets an error message instead of the bookmarks. The tab needs the user profile of XWiki (`xwiki-platform-user-profile-ui`, installed by the standard flavor); without it, the tab is simply not displayed. Bookmarks are kept for each wiki: the profile of a global user, which is on the main wiki, shows the bookmarks of the main wiki only.
 - **Macro parameter**: `{{bookmarks user="XWiki.jdoe"/}}` displays the bookmarks of the given user instead of the current one (this is what the profile tab does). The parameter takes precedence over the `user` request parameter, and no user picker is displayed. Only the user and the administrators of the wiki can view these bookmarks.
 
 ## Configuration
@@ -40,7 +41,7 @@ The same administration section, above the settings, offers tools reserved to th
 
 - **Storage**: whether the `advancedbookmarks` Solr core can be queried. When it cannot, the cause is written to the server logs.
 - **Export all the bookmarks**: downloads the bookmarks of all the users of the wiki as a single JSON file. Users whose bookmarks cannot be read (corrupted data, or leftovers of a user who no longer exists) are skipped and logged. An export larger than the import limit is refused.
-- **Import…**: imports such a file in the background, user by user, in the `merge` or `replace` mode of the individual import, with a progress bar. The whole file is validated before anything is written: an invalid file changes nothing. Users of the file who do not exist in the wiki are skipped; if the bookmarks of a user keep being modified during the import, or cannot be stored, that user is counted as failed and logged, and the import goes on. Only one import of a wiki runs at a time. The file is sent as `multipart/form-data`, so it is not limited by the maximum POST size of the servlet container; it holds at most 10,000 users and 32 MB, each user being limited like an individual export (10,000 folders or bookmarks, 1 MB).
+- **Import…**: imports such a file in the background, user by user, in the `merge` or `replace` mode of the individual import, with a progress bar. The whole file is validated before anything is written: an invalid file changes nothing. Users of the file who do not exist in the wiki are skipped; if the bookmarks of a user keep being modified during the import, or cannot be stored, that user is counted as failed and logged, and the import goes on. Only one import of a wiki runs at a time. The file is sent as `multipart/form-data`, so it is not limited by the maximum POST size of the servlet container; it holds at most 10,000 users and 32 MB, each user being limited like an individual export (32 KB).
 
 The wiki export file has this format:
 
@@ -74,16 +75,16 @@ The extension does not require programming rights.
 
 ## Script service
 
-`$services.advancedbookmarks` returns maps ready to be serialized as JSON. Each result has a `status` key (an HTTP status code) and, on failure, an `error` key: `forbidden`, `invalidToken`, `methodNotAllowed`, `invalid`, `conflict` or `storageError`. Error details are only written to the server logs.
+`$services.advancedbookmarks` returns maps ready to be serialized as JSON. Each result has a `status` key (an HTTP status code) and, on failure, an `error` key: `forbidden`, `invalidToken`, `methodNotAllowed`, `invalid`, `tooLarge` (the bookmarks would exceed their maximum size), `conflict` or `storageError`. Error details are only written to the server logs.
 
 | Method | Description |
 | --- | --- |
-| `getBookmarks(user)` | Folders and bookmarks of a user (empty for the current user), in display order, with their `version`. |
+| `getBookmarks(user)` | Folders and bookmarks of a user (empty for the current user), in display order, with their `version`, the space they use (`size`, in bytes) and the space allowed (`maxSize`). |
 | `getPanel()` | Bookmarks of the current user selected for the panel, or the first ones, up to the configured panel size. |
 | `isBookmarked(page)` | Whether the current user bookmarked a page (`bookmarked`), and whether the page may be bookmarked (`bookmarkable`, `false` for an excluded page). |
 | `isStarEnabled()` | Whether the current wiki displays the star (a plain boolean). |
 | `toggle(page)` | Add the page to the uncategorized bookmarks of the current user, or remove it. Adding an excluded page is refused (`forbidden`). Write operation. |
-| `save(user, json, version)` | Replace all the bookmarks of a user, provided they were not modified since `version` was read; `conflict` otherwise. Write operation. |
+| `save(user, json, version)` | Replace all the bookmarks of a user, provided they were not modified since `version` was read; `conflict` otherwise. Returns the new `version` and the space used (`size`). Write operation. |
 | `exportBookmarks(user)` | Export file of the bookmarks of a user, as a JSON string under the `content` key. |
 | `importBookmarks(user, json, mode, version)` | Import an export file in the `merge` or `replace` mode, provided the bookmarks were not modified since `version` was read. Returns the new `version` and the number of bookmarks `imported` and `skipped`. Write operation. |
 
@@ -103,6 +104,7 @@ The page `AdvancedBookmarks.Code.Service` exposes the same operations over HTTP,
 - When a page is renamed or moved within its wiki, the bookmarks pointing to it are updated. A page moved to another wiki is displayed as deleted.
 - A deleted page stays in the bookmarks and is displayed as deleted.
 - When a user is deleted, their bookmarks are erased in every wiki. When a wiki is deleted, all its bookmarks are erased.
+- Renaming a user page is handled by XWiki as the deletion of the old user, so the bookmarks of the old user are erased; they are not transferred to the new name. To keep them, an administrator exports them before the rename, from the management page opened for that user (`AdvancedBookmarks.WebHome?user=<old user>`, *Export*), then imports the file after the rename, from the management page opened for the new user (*Import…*, replace mode).
 
 ## Storage
 
@@ -139,4 +141,26 @@ When Maven and Java are not installed locally, the same build can be run with Do
 
 ```bash
 docker run --rm -v "$PWD":/projet -v "$HOME/.m2":/root/.m2 -w /projet maven:3.9-eclipse-temurin-21 mvn -B clean verify
+```
+
+### Functional tests
+
+The functional tests (module `advanced-bookmarks-test`) start XWiki with Tomcat and PostgreSQL, and a browser, in Docker containers, using the XWiki Docker test framework. They require Docker and are only run with the `integration-tests` and `docker` profiles:
+
+```bash
+mvn -B clean install -Pintegration-tests,docker
+```
+
+The tested XWiki version is the platform version of the parent POM (18.0.0). The first run downloads several Docker images and takes a while.
+
+When Maven itself runs in a Docker container (Docker Desktop), the test framework passes host paths to the Docker daemon, so the project and the local Maven repository must be mounted at the path the daemon knows them by, and `/.dockerenv` must be removed so that the framework mounts the local Maven repository in the XWiki container. For instance, on Windows with Git Bash:
+
+```bash
+R=/run/desktop/mnt/host/c/Users/<user>/.m2/repository
+MSYS_NO_PATHCONV=1 docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
+  -v 'C:\path\to\advanced-bookmarks':/run/desktop/mnt/host/c/path/to/advanced-bookmarks \
+  -v 'C:\Users\<user>\.m2':/run/desktop/mnt/host/c/Users/<user>/.m2 \
+  -w /run/desktop/mnt/host/c/path/to/advanced-bookmarks maven:3.9-eclipse-temurin-21 \
+  sh -c "rm -f /.dockerenv && mvn -B -Dmaven.repo.local=$R clean install -Pintegration-tests,docker"
 ```

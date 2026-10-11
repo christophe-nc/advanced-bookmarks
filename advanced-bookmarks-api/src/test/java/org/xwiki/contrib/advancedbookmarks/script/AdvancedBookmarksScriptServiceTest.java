@@ -35,6 +35,7 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkInvalidDataException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkManager;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreConflictException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreException;
+import org.xwiki.contrib.advancedbookmarks.BookmarkTooLargeException;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkConfiguration;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkJsonCodec;
 import org.xwiki.contrib.advancedbookmarks.internal.BookmarkPages;
@@ -160,6 +161,9 @@ class AdvancedBookmarksScriptServiceTest
         assertEquals(List.of(Map.of("id", "f", "name", "Folder", "parent", "", "order", 0)), result.get("folders"));
         assertEquals(List.of(Map.of("page", PAGE_KEY, "label", "Label", "folder", "", "order", 0, "panel", true,
             "viewable", true, "exists", true, "url", "/bin/view/Space/Page")), result.get("bookmarks"));
+        // The space used is the size of the stored JSON, so that the page can show how close the limit is.
+        assertEquals(new BookmarkJsonCodec().write(data).length(), result.get("size"));
+        assertEquals(BookmarkJsonCodec.MAX_JSON_BYTES, result.get("maxSize"));
     }
 
     @Test
@@ -281,12 +285,26 @@ class AdvancedBookmarksScriptServiceTest
     {
         when(this.bookmarkManager.save(any(), any())).thenReturn(4L);
 
-        assertEquals(Map.of(STATUS, 200, "version", "4"), this.service.save("bob", JSON, "3"));
+        Map<String, Object> result = this.service.save("bob", JSON, "3");
 
         ArgumentCaptor<BookmarkData> data = ArgumentCaptor.forClass(BookmarkData.class);
         verify(this.bookmarkManager).save(org.mockito.ArgumentMatchers.eq(BOB), data.capture());
         assertEquals(3L, data.getValue().getVersion());
         assertEquals(PAGE_KEY, data.getValue().getBookmarks().get(0).getPage());
+        assertEquals(Map.of(STATUS, 200, "version", "4", "size",
+            new BookmarkJsonCodec().write(data.getValue()).length()), result);
+    }
+
+    @Test
+    void reportsBookmarksExceedingTheirMaximumSize() throws Exception
+    {
+        String oversized = "{\"folders\":[],\"bookmarks\":[{\"page\":\"wiki:Space.Page\",\"label\":\""
+            + "l".repeat(BookmarkJsonCodec.MAX_JSON_BYTES) + "\"}]}";
+        assertEquals(Map.of(STATUS, 400, ERROR, "tooLarge"), this.service.save("", oversized, "0"));
+        verifyNoInteractions(this.bookmarkManager);
+
+        when(this.bookmarkManager.toggle(ALICE, PAGE)).thenThrow(new BookmarkTooLargeException());
+        assertEquals(Map.of(STATUS, 400, ERROR, "tooLarge"), this.service.toggle(PAGE_KEY));
     }
 
     @Test

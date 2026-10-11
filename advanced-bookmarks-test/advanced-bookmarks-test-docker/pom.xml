@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+ * See the NOTICE file distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2.1 of
+ * the License, or (at your option) any later version.
+ *
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this software; if not, write to the Free
+ * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.xwiki.contrib.advancedbookmarks</groupId>
+    <artifactId>advanced-bookmarks-test</artifactId>
+    <version>1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>advanced-bookmarks-test-docker</artifactId>
+  <name>Advanced Bookmarks - Tests - Functional Docker Tests</name>
+  <description>Functional tests of Advanced Bookmarks, run against XWiki in Docker containers.</description>
+  <packaging>jar</packaging>
+
+  <properties>
+    <!-- Functional tests are allowed to write to the console (XWiki and container logs). -->
+    <xwiki.surefire.captureconsole.skip>true</xwiki.surefire.captureconsole.skip>
+  </properties>
+
+  <dependencies>
+    <!-- The extension under test, installed in the XWiki instance started by the tests. -->
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>advanced-bookmarks-ui</artifactId>
+      <version>${project.version}</version>
+      <type>xar</type>
+    </dependency>
+    <!-- The user profile, which holds the Bookmarks tab: installed by the standard flavor, but not by the minimal
+         instance of the tests. Not a dependency of the extension, whose tab is simply not displayed without it. -->
+    <dependency>
+      <groupId>org.xwiki.platform</groupId>
+      <artifactId>xwiki-platform-user-profile-ui</artifactId>
+      <version>${platform.version}</version>
+      <type>xar</type>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>advanced-bookmarks-test-pageobjects</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.xwiki.platform</groupId>
+      <artifactId>xwiki-platform-test-docker</artifactId>
+      <version>${platform.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <testSourceDirectory>src/test/it</testSourceDirectory>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <!-- A usual production setup; some limits, such as the size of POST requests, belong to the servlet
+                 engine. Set here rather than in @UITest, so that every test class shares the same configuration. -->
+            <xwiki.test.ui.servletEngine>tomcat</xwiki.test.ui.servletEngine>
+            <xwiki.test.ui.database>postgresql</xwiki.test.ui.database>
+            <!-- The test framework mounts the local Maven repository in the XWiki container to install the extension
+                 under test, but only finds a non-default repository through this property of the test JVM. -->
+            <maven.repo.local>${settings.localRepository}</maven.repo.local>
+          </systemPropertyVariables>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -75,7 +75,9 @@ define('advanced-bookmarks-manager-messages', ['advanced-bookmarks-common'], fun
       'manager.importing',
       'manager.importDone',
       'manager.importFailed',
-      'manager.importInvalid'
+      'manager.importInvalid',
+      'manager.usage',
+      'manager.usageNearlyFull'
     ].concat(common.errorKeys)
   };
 });
@@ -90,8 +92,9 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
   var MAX_FOLDER_NAME_LENGTH = 100;
   var MAX_LABEL_LENGTH = 200;
   var SAVE_DELAY = 400;
-  // Mirror of BookmarkJsonCodec.MAX_JSON_BYTES: a larger file would be rejected by the server anyway.
-  var MAX_FILE_BYTES = 1048576;
+  // Shares of the allowed space from which the usage indicator warns the user, then tells that it is almost full.
+  var USAGE_WARNING = 0.8;
+  var USAGE_NEARLY_FULL = 0.95;
   var BAD_REQUEST = 400;
   var CONFLICT = 409;
   var ROOT = '';
@@ -153,7 +156,8 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
     var user = container.getAttribute('data-user') || '';
     var panelLimit = parseInt(container.getAttribute('data-panel-limit'), 10) || 10;
     // The version is kept as the string sent by the server: Solr versions exceed the precision of JavaScript numbers.
-    var state = {folders: [], bookmarks: [], version: '0'};
+    // The size and the maximum size of the bookmarks, in bytes, are measured by the server, which enforces the limit.
+    var state = {folders: [], bookmarks: [], version: '0', size: 0, maxSize: 0};
 
     // ------------------------------------------------------------------
     // Collapsed folders, remembered in the browser for each managed user.
@@ -329,7 +333,10 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
           };
         });
         state.version = String(data.version || '0');
+        state.size = data.size || 0;
+        state.maxSize = data.maxSize || 0;
         render();
+        updateUsage();
       });
     };
 
@@ -376,6 +383,8 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
       };
       call({operation: 'save', data: JSON.stringify(data), version: state.version}, true).then(function(result) {
         state.version = result.version;
+        state.size = result.size || 0;
+        updateUsage();
         showStatus(t('saved'), 'success');
       }).catch(function(error) {
         if (error.status === CONFLICT) {
@@ -404,6 +413,11 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
       'aria-label': t('filter')
     });
     var panelCounter = createElement('span', {className: 'advanced-bookmarks-counter'});
+    // The usage indicator: a meter, read by assistive technologies, whose colors follow its low and high thresholds.
+    var usageId = uniqueId('advanced-bookmarks-usage-');
+    var usageMeter = createElement('meter', {id: usageId, min: 0, optimum: 0});
+    var usageText = createElement('label', {'for': usageId});
+    var usage = createElement('span', {className: 'advanced-bookmarks-usage', hidden: true}, [usageText, usageMeter]);
     var status = createElement('span', {className: 'advanced-bookmarks-status', role: 'status',
       'aria-live': 'polite'});
     // The file input is hidden behind the "Import" button, whose label is translated, unlike the native one.
@@ -421,12 +435,30 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
           text: t('import')}),
         importFileInput,
         panelCounter,
+        usage,
         status
       ]),
       importForm,
       createElement('div', {className: 'advanced-bookmarks-toolbar-row'}, [filterInput])
     ]);
     var tree = createElement('div', {className: 'advanced-bookmarks-content'});
+
+    var updateUsage = function() {
+      if (!state.maxSize) {
+        usage.hidden = true;
+        return;
+      }
+      // Rounded down, so that 100 % is only displayed once the limit is actually reached.
+      var percent = Math.floor(state.size * 100 / state.maxSize);
+      var nearlyFull = state.size >= state.maxSize * USAGE_NEARLY_FULL;
+      usageMeter.max = state.maxSize;
+      usageMeter.low = state.maxSize * USAGE_WARNING;
+      usageMeter.high = state.maxSize * USAGE_NEARLY_FULL;
+      usageMeter.value = state.size;
+      usageText.textContent = t('usage', percent) + (nearlyFull ? ' ' + t('usageNearlyFull') : '');
+      usage.classList.toggle('advanced-bookmarks-usage-full', nearlyFull);
+      usage.hidden = false;
+    };
 
     var showStatus = function(text, type, withRetry) {
       status.textContent = text;
@@ -767,7 +799,8 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
       if (!file) {
         return;
       }
-      if (file.size > MAX_FILE_BYTES) {
+      // A file larger than the space allowed would be rejected by the server anyway.
+      if (state.maxSize && file.size > state.maxSize) {
         notify(t('importTooLarge'), 'error');
         return;
       }

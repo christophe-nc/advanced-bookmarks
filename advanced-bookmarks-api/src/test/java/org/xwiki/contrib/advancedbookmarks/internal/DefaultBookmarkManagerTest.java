@@ -35,6 +35,7 @@ import org.xwiki.contrib.advancedbookmarks.BookmarkRecord;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStore;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreConflictException;
 import org.xwiki.contrib.advancedbookmarks.BookmarkStoreException;
+import org.xwiki.contrib.advancedbookmarks.BookmarkTooLargeException;
 import org.xwiki.model.reference.DocumentReference;
 import org.xwiki.test.annotation.BeforeComponent;
 import org.xwiki.test.annotation.ComponentList;
@@ -286,15 +287,29 @@ class DefaultBookmarkManagerTest
     }
 
     @Test
-    void refusesToExceedTheMaximumNumberOfBookmarks() throws Exception
+    void refusesToExceedTheMaximumSize() throws Exception
     {
-        StringBuilder json = new StringBuilder("{\"folders\":[],\"bookmarks\":[");
-        for (int i = 0; i < BookmarkJsonCodec.MAX_ITEMS; i++) {
-            json.append(i == 0 ? "" : ",").append("{\"page\":\"Space.P").append(i).append("\"}");
+        // Bookmarks filling the allowed space, with less room left than the bookmark of the page takes.
+        BookmarkData data = new BookmarkData();
+        // The list of the data itself, since setBookmarks copies the given list.
+        List<BookmarkEntry> bookmarks = data.getBookmarks();
+        for (int i = 0;; i++) {
+            BookmarkEntry bookmark = new BookmarkEntry();
+            // Already normalized, so that reading them does not make any room.
+            bookmark.setPage("wiki:S.P" + i);
+            bookmark.setLabel("");
+            bookmark.setFolder(BookmarkFolder.ROOT);
+            bookmark.setOrder(i);
+            bookmarks.add(bookmark);
+            if (this.codec.getSize(data) > BookmarkJsonCodec.MAX_JSON_BYTES) {
+                bookmarks.remove(bookmark);
+                break;
+            }
         }
-        stored(json.append("]}").toString(), 3L);
+        stored(this.codec.write(data), 3L);
 
-        assertThrows(BookmarkInvalidDataException.class, () -> this.manager.toggle(USER, PAGE));
+        assertThrows(BookmarkTooLargeException.class, () -> this.manager.toggle(USER, PAGE));
+        verify(this.store, never()).save(any(), any(), any(), anyLong());
     }
 
     @Test
