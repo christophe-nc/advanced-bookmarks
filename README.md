@@ -2,6 +2,8 @@
 
 Advanced Bookmarks is an XWiki extension for managing personal bookmarks in folders, with a page star and a quick-access panel.
 
+The user and administrator documentation, published on extensions.xwiki.org, is kept in [docs/extensions.xwiki.org.xwiki](docs/extensions.xwiki.org.xwiki) (XWiki 2.1 syntax). This README is aimed at developers and administrators.
+
 ## Installation
 
 Install the **Advanced Bookmarks** extension (`org.xwiki.contrib.advancedbookmarks:advanced-bookmarks-ui`) with the Extension Manager, as a wiki administrator. Its Java part, `advanced-bookmarks-api`, is installed automatically.
