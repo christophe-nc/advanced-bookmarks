@@ -8,3 +8,8 @@ container-backup.tar
 target-eclipse/
 node_modules/
 /advanced-bookmarks-api/node/
+# Local working files, kept out of the public repository
+CLAUDE.md
+claude.md
+Advanced_Bookmarks_passation.md
+favoris-2.0.0.zip
