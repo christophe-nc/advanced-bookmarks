@@ -48,6 +48,8 @@
 #if ($services.security.authorization.hasAccess('admin', $wikiReference))
   #if ($services.advancedbookmarks.admin)
     #set ($storeStatus = $services.advancedbookmarks.admin.getStoreStatus())
+    ## Lets the browser refuse a file too large before sending it; the server checks the size again.
+    #set ($maxImportFileSize = $services.advancedbookmarks.admin.getMaxImportFileSize())
   #end
 
 === {{translation key="advancedbookmarks.admin.tools.storeHeading"/}} ===
@@ -65,7 +67,7 @@
   ## The shared helpers must be loaded before the script that requires them.
   #set ($discard = $xwiki.jsrx.use('advancedbookmarks/common.js'))
   #set ($discard = $xwiki.jsrx.use('advancedbookmarks/admintools.js'))
-{{html}}&lt;div class="advanced-bookmarks-admin-tools"&gt;&lt;/div&gt;{{/html}}
+{{html}}&lt;div class="advanced-bookmarks-admin-tools" data-max-file-bytes="$!escapetool.xml($maxImportFileSize)"&gt;&lt;/div&gt;{{/html}}
 #end
 {{/velocity}}
 </content>

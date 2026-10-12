@@ -754,48 +754,18 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
       });
     };
 
-    // The content of the chosen file, uploaded when the user confirms the import.
+    // The content of the chosen file, uploaded when the user confirms the import, and the controls of the form.
     var importContent = null;
+    var importControls = null;
 
-    var hideImportForm = function() {
+    var clearImport = function() {
       importContent = null;
-      importForm.hidden = true;
-      importForm.textContent = '';
-    };
-
-    var setImportFormEnabled = function(enabled) {
-      importForm.querySelectorAll('input, button').forEach(function(element) {
-        element.disabled = !enabled;
-      });
-    };
-
-    var createImportMode = function(name, mode, label, checked) {
-      return createElement('div', {className: 'radio'}, [
-        createElement('label', {}, [
-          createElement('input', {type: 'radio', name: name, value: mode, checked: checked,
-            'data-action': 'importMode'}),
-          ' ' + label
-        ])
-      ]);
+      importControls = null;
     };
 
     var showImportForm = function(fileName, content) {
-      var name = uniqueId('advanced-bookmarks-import-mode-');
       importContent = content;
-      importForm.textContent = '';
-      importForm.appendChild(createElement('p', {text: t('importFile', fileName)}));
-      importForm.appendChild(createImportMode(name, 'merge', t('importMerge'), true));
-      importForm.appendChild(createImportMode(name, 'replace', t('importReplace'), false));
-      importForm.appendChild(createElement('p', {className: 'advanced-bookmarks-import-warning', hidden: true,
-        text: t('importReplaceWarning')}));
-      importForm.appendChild(createElement('div', {className: 'advanced-bookmarks-toolbar-row'}, [
-        createElement('button', {type: 'button', className: 'btn btn-primary btn-sm', 'data-action': 'importConfirm',
-          text: t('importConfirm')}),
-        createElement('button', {type: 'button', className: 'btn btn-default btn-sm', 'data-action': 'importCancel',
-          text: t('cancel')})
-      ]));
-      importForm.hidden = false;
-      importForm.querySelector('input').focus();
+      importControls = common.showImportForm(importForm, fileName, t, runImport, clearImport);
     };
 
     var readImportFile = function() {
@@ -817,17 +787,18 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
       });
     };
 
-    var runImport = function() {
-      var mode = importForm.querySelector('input[type="radio"]:checked').value;
-      setImportFormEnabled(false);
+    var runImport = function(mode) {
+      var controls = importControls;
+      controls.setEnabled(false);
       showStatus(t('importing'), 'progress');
       call({operation: 'import', data: importContent, mode: mode, version: state.version}, true)
         .then(function(result) {
-          hideImportForm();
+          controls.close();
+          clearImport();
           notify(t('importDone', result.imported, result.skipped));
           return reload();
         }, function(error) {
-          setImportFormEnabled(true);
+          controls.setEnabled(true);
           if (error.status === CONFLICT) {
             // The form stays open, so that the file can be imported into the reloaded bookmarks.
             notify(t('conflict'), 'warning');
@@ -864,8 +835,6 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
       'import': function() {
         importFileInput.click();
       },
-      importConfirm: runImport,
-      importCancel: hideImportForm,
       toggle: function(target) {
         setCollapsed(target.folderId, !collapsed[folderKey(target.folderId)]);
         render();
@@ -936,8 +905,6 @@ require(['jquery', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmarks-m
       var target = getTargetOf(element);
       if (action === 'importFile') {
         readImportFile();
-      } else if (action === 'importMode') {
-        importForm.querySelector('.advanced-bookmarks-import-warning').hidden = element.value !== 'replace';
       } else if (action === 'panel' && target.bookmark) {
         if (element.checked && countPanelBookmarks() >= panelLimit) {
           element.checked = false;

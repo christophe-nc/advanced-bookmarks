@@ -41,6 +41,8 @@
     <!-- The Solr core initializer must be visible from the root component manager, which creates the cores, and the
          bookmarks core is shared by the whole farm: the API can only be installed at farm level. -->
     <xwiki.extension.namespaces>{root}</xwiki.extension.namespaces>
+    <!-- Default value of the standard property, which also skips the JavaScript tests when set to true. -->
+    <skipTests>false</skipTests>
   </properties>
 
   <dependencies>
@@ -197,6 +199,48 @@
               <includes>
                 <include>ApplicationResources*.properties</include>
               </includes>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- Unit tests of the JavaScript resources, with Jest (see package.json). The plugin downloads Node.js, so the
+           build needs no Node.js installation; the archive is cached in the local Maven repository. Node.js is installed
+           outside target/ so that "clean" keeps it: the plugin skips the installation when the version is already there,
+           and extracting its many files is slow on some file systems (a Windows folder mounted in Docker). The tests
+           follow -DskipTests like the Java tests, and a failed test or a coverage below the threshold fails the build.
+      -->
+      <plugin>
+        <groupId>com.github.eirslett</groupId>
+        <artifactId>frontend-maven-plugin</artifactId>
+        <configuration>
+          <nodeVersion>v22.12.0</nodeVersion>
+          <installDirectory>${project.basedir}/node</installDirectory>
+        </configuration>
+        <executions>
+          <execution>
+            <id>install-node</id>
+            <goals>
+              <goal>install-node-and-npm</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>npm-ci</id>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <configuration>
+              <arguments>ci --no-audit --no-fund</arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>javascript-tests</id>
+            <phase>test</phase>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <configuration>
+              <arguments>test</arguments>
+              <skip>${skipTests}</skip>
             </configuration>
           </execution>
         </executions>

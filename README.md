@@ -90,13 +90,14 @@ The extension does not require programming rights.
 | `exportBookmarks(user)` | Export file of the bookmarks of a user, as a JSON string under the `content` key. |
 | `importBookmarks(user, json, mode, version)` | Import an export file in the `merge` or `replace` mode, provided the bookmarks were not modified since `version` was read. Returns the new `version` and the number of bookmarks `imported` and `skipped`. Write operation. |
 
-`$services.advancedbookmarks.admin` exposes the administration tools of the current wiki, with the same kind of results. Every method returns `forbidden` to users who do not administer the wiki.
+`$services.advancedbookmarks.admin` exposes the administration tools of the current wiki, with the same kind of results. Every method returns `forbidden` to users who do not administer the wiki, except `getMaxImportFileSize()`, which returns a plain number.
 
 | Method | Description |
 | --- | --- |
 | `getStoreStatus()` | Whether the storage can be queried, under the `available` key. |
 | `exportWiki()` | Wiki export file under the `content` key, with the number of users `exported` and `skipped`. |
 | `startWikiImport(mode)` | Validate the wiki export file sent in the `file` part of the current `multipart/form-data` request, then import it in the background in the `merge` or `replace` mode. Returns the number of `users` of the file; `conflict` if an import of the wiki is already running. Write operation. |
+| `getMaxImportFileSize()` | Maximum size, in bytes, of a file accepted by `startWikiImport` (32 MiB), given to the browser so that it can refuse a larger file before sending it. Available without any right. |
 | `getWikiImportStatus()` | `state` of the running or last import (`none`, `running` or `finished`) and, unless `none`, its `progress` (percentage), the counts `importedUsers`, `skippedUsers`, `failedUsers`, `importedBookmarks` and `skippedBookmarks`, and `failed` if it stopped on an unexpected error. |
 
 The page `AdvancedBookmarks.Code.Service` exposes the same operations over HTTP, with the `get` action and an `operation` parameter (`isBookmarked`, `toggle`, `getBookmarks`, `save`, `export`, `import`, and for administrators `exportWiki`, `startWikiImport`, `wikiImportStatus`); it returns the result as JSON with the matching HTTP status.
@@ -139,10 +140,12 @@ mvn -B clean verify
 
 Add `-Pquality` to also check the test coverage, as the XWiki continuous integration does.
 
-When Maven and Java are not installed locally, the same build can be run with Docker from the project root:
+The JavaScript resources of the API module have their own unit tests, written with [Jest](https://jestjs.io/) in `advanced-bookmarks-api/src/test/javascript` and run by Maven in the `test` phase. Node.js is downloaded by the `frontend-maven-plugin`, so no Node.js installation is needed; `-DskipTests` skips these tests as well. A coverage below the threshold of `package.json` fails the build.
+
+When Maven and Java are not installed locally, the same build can be run with Docker from the project root (mounting `~/.npm` keeps the npm packages between builds):
 
 ```bash
-docker run --rm -v "$PWD":/projet -v "$HOME/.m2":/root/.m2 -w /projet maven:3.9-eclipse-temurin-21 mvn -B clean verify
+docker run --rm -v "$PWD":/projet -v "$HOME/.m2":/root/.m2 -v "$HOME/.npm":/root/.npm -w /projet maven:3.9-eclipse-temurin-21 mvn -B clean verify
 ```
 
 ### Functional tests

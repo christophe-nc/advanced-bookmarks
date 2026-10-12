@@ -114,6 +114,81 @@ define('advanced-bookmarks-common', ['xwiki-meta'], function(xm) {
     }, 60000);
   };
 
+  // Gives each import form of the page its own group of radio buttons.
+  var importFormCount = 0;
+
+  /**
+   * Display, in the given container, the form that confirms the import of a file: the name of the file, the choice
+   * between merging and replacing, with a warning for the latter, and the confirm and cancel buttons. The form only
+   * asks for the mode: sending the file is left to the calling script.
+   *
+   * @param container the element that holds the form, emptied and shown
+   * @param fileName the name of the chosen file
+   * @param translate the translation function of the calling script, which knows the keys importFile (with the file
+   *     name as parameter), importMerge, importReplace, importReplaceWarning, importConfirm and cancel
+   * @param onConfirm called with the chosen mode, "merge" or "replace", when the user confirms
+   * @param onCancel called once the form is closed by the cancel button
+   * @return the controls of the form: setEnabled(enabled), and close() which empties and hides it
+   */
+  var showImportForm = function(container, fileName, translate, onConfirm, onCancel) {
+    var name = 'advanced-bookmarks-import-mode-' + (++importFormCount);
+    var createMode = function(mode, checked) {
+      return createElement('input', {type: 'radio', name: name, value: mode, checked: checked});
+    };
+    var createChoice = function(input, label) {
+      return createElement('div', {className: 'radio'}, [createElement('label', {}, [input, ' ' + label])]);
+    };
+    var mergeInput = createMode('merge', true);
+    var replaceInput = createMode('replace', false);
+    var warning = createElement('p', {className: 'advanced-bookmarks-import-warning text-warning', hidden: true,
+      text: translate('importReplaceWarning')});
+    var confirmButton = createElement('button', {type: 'button', className: 'btn btn-primary btn-sm',
+      text: translate('importConfirm')});
+    var cancelButton = createElement('button', {type: 'button', className: 'btn btn-default btn-sm',
+      text: translate('cancel')});
+    var controls = {
+      setEnabled: function(enabled) {
+        container.querySelectorAll('input, button').forEach(function(element) {
+          element.disabled = !enabled;
+        });
+      },
+      close: function() {
+        container.hidden = true;
+        container.textContent = '';
+      }
+    };
+    var getMode = function() {
+      return replaceInput.checked ? 'replace' : 'merge';
+    };
+
+    container.textContent = '';
+    [
+      createElement('p', {text: translate('importFile', fileName)}),
+      createChoice(mergeInput, translate('importMerge')),
+      createChoice(replaceInput, translate('importReplace')),
+      warning,
+      createElement('div', {className: 'advanced-bookmarks-import-buttons'}, [confirmButton, ' ', cancelButton])
+    ].forEach(function(element) {
+      container.appendChild(element);
+    });
+    // Listeners on the elements of the form, which are replaced each time the form is displayed.
+    [mergeInput, replaceInput].forEach(function(input) {
+      input.addEventListener('change', function() {
+        warning.hidden = getMode() !== 'replace';
+      });
+    });
+    confirmButton.addEventListener('click', function() {
+      onConfirm(getMode());
+    });
+    cancelButton.addEventListener('click', function() {
+      controls.close();
+      onCancel();
+    });
+    container.hidden = false;
+    mergeInput.focus();
+    return controls;
+  };
+
   /**
    * @return the current date, as used in the names of export files (2026-10-10)
    */
@@ -139,6 +214,7 @@ define('advanced-bookmarks-common', ['xwiki-meta'], function(xm) {
     notify: notify,
     callService: callService,
     downloadFile: downloadFile,
+    showImportForm: showImportForm,
     getDateForFileName: getDateForFileName
   };
 });

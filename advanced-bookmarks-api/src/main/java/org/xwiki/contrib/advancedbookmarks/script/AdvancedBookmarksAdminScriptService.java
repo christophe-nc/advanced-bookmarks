@@ -128,6 +128,17 @@ public class AdvancedBookmarksAdminScriptService implements ScriptService
     }
 
     /**
+     * The page gives this size to the browser, which can then refuse a larger file before sending it; the server
+     * checks it again in {@link #startWikiImport(String)}. Not a secret, hence available without any right.
+     *
+     * @return the maximum size, in bytes, of a file accepted by {@link #startWikiImport(String)}
+     */
+    public int getMaxImportFileSize()
+    {
+        return BookmarkWikiTransfer.MAX_FILE_BYTES;
+    }
+
+    /**
      * @return the state of the running or last import of the current wiki under the {@code state} key:
      *         {@code none}, {@code running} or {@code finished}; for the last two, the progress as a percentage under
      *         the {@code progress} key, the counts under the {@code importedUsers}, {@code skippedUsers},

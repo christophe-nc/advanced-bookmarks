@@ -52,8 +52,6 @@ require(['xwiki-meta', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmar
     function(xm, common, l10n) {
   'use strict';
 
-  // Mirror of BookmarkWikiTransfer.MAX_FILE_BYTES: a larger file would be rejected by the server anyway.
-  var MAX_FILE_BYTES = 33554432;
   var BAD_REQUEST = 400;
   var CONFLICT = 409;
   var POLL_DELAY = 1000;
@@ -69,7 +67,17 @@ require(['xwiki-meta', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmar
     return common.callService(l10n, parameters, post);
   };
 
+  /**
+   * @return the maximum size of an import file given by the page, or 0 when it is missing or invalid: the server
+   *     then rejects a file too large on its own
+   */
+  var getMaxFileBytes = function(container) {
+    var value = Number(container.getAttribute('data-max-file-bytes'));
+    return Number.isInteger(value) && value > 0 ? value : 0;
+  };
+
   var initialize = function(container) {
+    var maxFileBytes = getMaxFileBytes(container);
     var fileInput = createElement('input', {type: 'file', accept: '.json,application/json', className: 'hidden',
       'aria-hidden': 'true', tabIndex: -1});
     var exportButton = createElement('button', {type: 'button', className: 'btn btn-default', text: t('export')});
@@ -89,18 +97,18 @@ require(['xwiki-meta', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmar
       container.appendChild(element);
     });
 
-    // The chosen file, sent when the user confirms the import.
+    // The chosen file, sent when the user confirms the import, and the controls of the form.
     var importFile = null;
+    var importControls = null;
 
     var setBusy = function(busy) {
       exportButton.disabled = busy;
       importButton.disabled = busy;
     };
 
-    var hideImportForm = function() {
+    var clearImport = function() {
       importFile = null;
-      importForm.hidden = true;
-      importForm.textContent = '';
+      importControls = null;
     };
 
     var showStatus = function(text) {
@@ -153,48 +161,18 @@ require(['xwiki-meta', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmar
       });
     };
 
-    var createImportMode = function(name, mode, label, checked) {
-      return createElement('div', {className: 'radio'}, [
-        createElement('label', {}, [
-          createElement('input', {type: 'radio', name: name, value: mode, checked: checked}),
-          ' ' + label
-        ])
-      ]);
-    };
-
     var showImportForm = function(file) {
-      var name = 'advanced-bookmarks-admin-import-mode-' + Math.random().toString(36).slice(2, 9);
-      var warning = createElement('p', {className: 'text-warning', hidden: true, text: t('importReplaceWarning')});
-      var confirmButton = createElement('button', {type: 'button', className: 'btn btn-primary',
-        text: t('importConfirm')});
-      var cancelButton = createElement('button', {type: 'button', className: 'btn btn-default', text: t('cancel')});
       importFile = file;
-      importForm.textContent = '';
-      [
-        createElement('p', {text: t('importFile', file.name)}),
-        createImportMode(name, 'merge', t('importMerge'), true),
-        createImportMode(name, 'replace', t('importReplace'), false),
-        warning,
-        createElement('p', {}, [confirmButton, ' ', cancelButton])
-      ].forEach(function(element) {
-        importForm.appendChild(element);
-      });
-      confirmButton.addEventListener('click', startImport);
-      cancelButton.addEventListener('click', hideImportForm);
-      importForm.hidden = false;
-      importForm.querySelector('input').focus();
+      importControls = common.showImportForm(importForm, file.name, t, startImport, clearImport);
     };
 
-    var getImportMode = function() {
-      return importForm.querySelector('input[type="radio"]:checked').value;
-    };
-
-    var startImport = function() {
+    var startImport = function(mode) {
       var body = new FormData();
       body.append('operation', 'startWikiImport');
-      body.append('mode', getImportMode());
+      body.append('mode', mode);
       body.append('file', importFile);
-      hideImportForm();
+      importControls.close();
+      clearImport();
       setBusy(true);
       showProgress(0);
       call(body, true).then(poll, function(error) {
@@ -209,10 +187,6 @@ require(['xwiki-meta', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmar
       });
     };
 
-    // Listened once on the form, whose content is replaced each time a file is chosen.
-    importForm.addEventListener('change', function() {
-      importForm.querySelector('.text-warning').hidden = getImportMode() !== 'replace';
-    });
     exportButton.addEventListener('click', exportWiki);
     importButton.addEventListener('click', function() {
       fileInput.click();
@@ -224,7 +198,7 @@ require(['xwiki-meta', 'advanced-bookmarks-common', 'xwiki-l10n!advanced-bookmar
       if (!file) {
         return;
       }
-      if (file.size > MAX_FILE_BYTES) {
+      if (maxFileBytes && file.size > maxFileBytes) {
         notify(t('importTooLarge'), 'error');
         return;
       }

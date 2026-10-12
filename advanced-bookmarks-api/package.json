@@ -1,0 +1,38 @@
+{
+  "name": "advanced-bookmarks-api",
+  "private": true,
+  "description": "Unit tests of the JavaScript of Advanced Bookmarks, run by Maven through the frontend-maven-plugin.",
+  "license": "LGPL-2.1",
+  "scripts": {
+    "test": "jest"
+  },
+  "devDependencies": {
+    "jest": "29.7.0",
+    "jest-environment-jsdom": "29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "testMatch": [
+      "<rootDir>/src/test/javascript/**/*.test.js"
+    ],
+    "transform": {
+      "/src/main/resources/.+[.]js$": "<rootDir>/src/test/javascript/amdTransformer.js"
+    },
+    "collectCoverage": true,
+    "collectCoverageFrom": [
+      "src/main/resources/advancedbookmarks/admintools.js",
+      "src/main/resources/advancedbookmarks/common.js",
+      "src/main/resources/advancedbookmarks/star.js"
+    ],
+    "coverageDirectory": "target/js-coverage",
+    "coverageReporters": [
+      "text",
+      "lcov"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "lines": 90
+      }
+    }
+  }
+}

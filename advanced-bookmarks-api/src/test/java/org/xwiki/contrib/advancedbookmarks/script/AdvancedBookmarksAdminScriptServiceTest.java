@@ -115,6 +115,15 @@ class AdvancedBookmarksAdminScriptServiceTest
     }
 
     @Test
+    void givesTheMaximumImportFileSizeWithoutAnyRight()
+    {
+        when(this.rights.isAdmin()).thenReturn(false);
+
+        assertEquals(BookmarkWikiTransfer.MAX_FILE_BYTES, this.service.getMaxImportFileSize());
+        verifyNoInteractions(this.rights);
+    }
+
+    @Test
     void reportsWhetherTheStorageIsAvailable()
     {
         when(this.store.isAvailable()).thenReturn(true, false);
